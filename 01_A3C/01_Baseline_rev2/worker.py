@@ -190,7 +190,7 @@ class Worker:
             loss = self.loss_coef * loss
 
         grads = tape.gradient(loss, self.policy.trainable_variables)
-        grads, _ = tf.clip_by_global_norm(grads, 30)  # default=40->10
+        grads, _ = tf.clip_by_global_norm(grads, 30)  # default=40->30
 
         info = {"id": self.worker_id,
                 "policy_loss": -1 * policy_loss * self.loss_coef,

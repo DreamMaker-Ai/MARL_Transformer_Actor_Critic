@@ -5,11 +5,11 @@ import gym
 class Config:
     def __init__(self):
 
-        self.model_dir = 'models/global_policy_605000/'  # newest file -> 'ls -ltr'
-        # self.model_dir = None
+        # self.model_dir = 'models/global_policy_960000/'  # newest file -> 'ls -ltr'
+        self.model_dir = None
 
         if self.model_dir:  # starting steps for continual training
-            self.n0 = 607000  # learner update cycles. Should be read from tensorboard
+            self.n0 = 961300  # learner update cycles. Should be read from tensorboard
             # self.actor_cycles = 0  # Not used in actor-critic
         else:
             self.n0 = 0
@@ -51,11 +51,11 @@ class Config:
         self.key_dim = 128
         self.num_heads = 2
 
-        self.dropout_rate = 0.2  # default=0.2
+        self.dropout_rate = 0.2  # default=0.2, (Dropout is not used.)
 
         # Training parameters
-        self.actor_rollout_steps = 8  # default=4
-        self.num_update_cycles = 10000000
+        self.actor_rollout_steps = 16  # default=16
+        self.num_update_cycles = 100000000
         self.batch_size = self.actor_rollout_steps
         # self.num_minibatchs = 30  # bach_sizeのminibatchの数/1 update_cycle of learner, default=30
         self.tau = 0.01  # Soft update of target network
@@ -64,9 +64,9 @@ class Config:
 
         self.learning_rate = 5e-5  # Default=5e-5
         self.value_loss_coef = 5.0  # Default=0.5 -> 5.0
-        self.entropy_coef = 0.005  # Default=0.01
+        self.entropy_coef = 0.01  # Default=0.01
 
-        self.loss_coef = 10.0
+        self.loss_coef = 10.0  # Default=10.0
 
         # Define Lanchester simulation parameters
         self.threshold = 5.0  # min of forces R & B

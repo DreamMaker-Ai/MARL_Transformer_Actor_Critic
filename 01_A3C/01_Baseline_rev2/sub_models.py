@@ -321,15 +321,14 @@ class PolicyModel(tf.keras.models.Model):
      time_distributed_6 (TimeDis  (None, 15, 768)          197376
      tributed)
 
-     dropout_2 (Dropout)         (None, 15, 768)           0
-
-     time_distributed_7 (TimeDis  (None, 15, 256)          196864
+     time_distributed_8 (TimeDis  (None, 15, 256)          196864
      tributed)
 
-     time_distributed_8 (TimeDis  (None, 15, 5)            1285
+     time_distributed_9 (TimeDis  (None, 15, 5)            1285
      tributed)
 
-     softmax_1 (Softmax)         (None, 15, 5)             0
+     time_distributed_10 (TimeDi  (None, 15, 5)            0
+     stributed)
 
      tf.math.multiply_4 (TFOpLam  (None, 15, 5)            0
      bda)
@@ -430,21 +429,19 @@ class ValueModel(tf.keras.models.Model):
     _________________________________________________________________
      Layer (type)                Output Shape              Param #
     =================================================================
-     input_1 (InputLayer)        [(None, 15, 256)]         0
+     input_7 (InputLayer)        [(None, 15, 256)]         0
 
-     time_distributed_9 (TimeDis  (None, 15, 768)          197376
-     tributed)
-
-     dropout_2 (Dropout)         (None, 15, 768)           0
-
-     time_distributed_10 (TimeDi  (None, 15, 256)          196864
+     time_distributed_11 (TimeDi  (None, 15, 768)          197376
      stributed)
 
-     time_distributed_11 (TimeDi  (None, 15, 1)            257
+     time_distributed_13 (TimeDi  (None, 15, 256)          196864
      stributed)
 
-     tf.math.multiply (TFOpLambd  (None, 15, 1)            0
-     a)
+     time_distributed_14 (TimeDi  (None, 15, 1)            257
+     stributed)
+
+     tf.math.multiply_6 (TFOpLam  (None, 15, 1)            0
+     bda)
 
     =================================================================
     Total params: 394,497

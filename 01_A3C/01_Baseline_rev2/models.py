@@ -24,9 +24,10 @@ class MarlTransformerModel(tf.keras.models.Model):
 
      cnn_model (CNNModel)           (None, 15, 256)      258944      ['input_1[0][0]']
 
-     dropout (Dropout)              (None, 15, 256)      0           ['cnn_model[0][0]']
+     time_distributed_6 (TimeDistri  (None, 15, 256)     0           ['cnn_model[0][0]']
+     buted)
 
-     multi_head_attention_model (Mu  ((None, 15, 256),   526080      ['dropout[0][0]']
+     multi_head_attention_model (Mu  ((None, 15, 256),   526080      ['time_distributed_6[0][0]']
      ltiHeadAttentionModel)          (None, 2, 15, 15))
 
      multi_head_attention_model_1 (  ((None, 15, 256),   526080      ['multi_head_attention_model[0][0
