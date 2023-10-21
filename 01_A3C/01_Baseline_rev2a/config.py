@@ -5,11 +5,11 @@ import gym
 class Config:
     def __init__(self):
 
-        # self.model_dir = 'models/global_policy_960000/'  # newest file -> 'ls -ltr'
-        self.model_dir = None
+        self.model_dir = 'models/global_policy_790000/'  # newest file -> 'ls -ltr'
+        # self.model_dir = None
 
         if self.model_dir:  # starting steps for continual training
-            self.n0 = 961300  # learner update cycles. Should be read from tensorboard
+            self.n0 = 790000  # learner update cycles. Should be read from tensorboard
             # self.actor_cycles = 0  # Not used in actor-critic
         else:
             self.n0 = 0

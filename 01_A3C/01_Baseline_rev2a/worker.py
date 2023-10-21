@@ -107,11 +107,10 @@ class Worker:
         self.episode_return = 0
         self.step = 0
 
-    def rollout_and_compute_grads(self, weights):
+    def rollout_and_collect_trajectory(self, weights):
         """
         0. Global policyの重みをコピー
         1. Rolloutして、batch_size分のデータを収集
-        2. 収集したバッチデータからロスを算出して勾配を計算
         """
 
         """ 
@@ -135,70 +134,7 @@ class Worker:
 
         trajectory = self._rollout()
 
-        """ 2. 収集したバッチデータからロスを算出して勾配を計算 """
-        with tf.GradientTape() as tape:
-            [policy_probs, values], _ = \
-                self.policy(trajectory["s"], trajectory["mask"], training=False)
-            # (b,n,action_dim), (b,n,1)
-
-            """ Compute log π(a|s) """
-            selected_actions = tf.convert_to_tensor(trajectory["a"], dtype=tf.int32)  # (b,n)
-            # one_hot for dead or dummy agents' action (=-1) is zero vectors.
-            selected_actions_onehot = \
-                tf.one_hot(selected_actions, depth=self.action_space_dim, dtype=tf.float32)
-            # (b,n,action_dim)
-
-            log_probs = \
-                selected_actions_onehot * tf.math.log(policy_probs + 1e-5)  # (b,n,action_dim)
-            selected_actions_log_probs = tf.reduce_sum(log_probs, axis=-1)  # (b,n)
-
-            """ Covert trajectory["mask"] to tf.tensor (float32) """
-            masks = tf.convert_to_tensor(trajectory["mask"], dtype=tf.float32)  # (b,n)
-
-            """ Compute advantage and value loss """
-            # Compute num of alive agents every batch (time step)
-            num_alive_agents = tf.reduce_sum(masks, axis=-1)  # (b,)
-
-            advantages = trajectory["R"] - tf.squeeze(values, axis=-1)  # (b,n)
-            advantages = masks * advantages  # (b,n)
-
-            value_loss = tf.reduce_sum(advantages ** 2, axis=-1)  # (b,)
-            value_loss = value_loss / num_alive_agents  # (b,)
-            value_loss = tf.reduce_mean(value_loss)
-
-            mean_advantage = tf.reduce_mean(advantages)  # 表示用
-
-            """ Compute policy loss """
-            policy_loss = selected_actions_log_probs * tf.stop_gradient(advantages)  # (b,n)
-            policy_loss = masks * policy_loss  # (b,n)
-            policy_loss = tf.reduce_sum(policy_loss, axis=-1)  # (b,)
-            policy_loss = policy_loss / num_alive_agents  # (b,)
-            policy_loss = tf.reduce_mean(policy_loss)
-
-            """ Compute entropy """
-            entropy = - policy_probs * tf.math.log(policy_probs + 1e-5)  # (b,n,action_dim)
-            entropy = tf.reduce_mean(entropy, axis=-1)  # (b,n)
-            entropy = masks * entropy  # (b,n)
-            entropy = tf.reduce_sum(entropy, axis=-1)  # (b,)
-            entropy = entropy / num_alive_agents  # (b,)
-            entropy = tf.reduce_mean(entropy)
-
-            """ Compute total loss """
-            loss = self.value_loss_coef * value_loss - 1 * policy_loss - \
-                   1 * self.entropy_coef * entropy
-
-            loss = self.loss_coef * loss
-
-        grads = tape.gradient(loss, self.policy.trainable_variables)
-        grads, _ = tf.clip_by_global_norm(grads, 30)  # default=40->30
-
-        info = {"id": self.worker_id,
-                "policy_loss": -1 * policy_loss * self.loss_coef,
-                "value_loss": self.value_loss_coef * value_loss * self.loss_coef,
-                "entropy": -1 * self.entropy_coef * entropy * self.loss_coef,
-                "advantage": mean_advantage}
-
-        return grads, info
+        return trajectory
 
     def _rollout(self):
         """
@@ -216,13 +152,10 @@ class Worker:
         trajectory["mask2"] = []  # next_mask
         trajectory["R"] = []
 
-        dones = {'all_dones': False}
-        i = 0
-
         # 2. Rollout実施
-        while not dones["all_dones"] and i < self.batch_size:
+        for i in range(self.batch_size):
             # acts: action=-1 for the dead or dummy agents.
-            acts = self.policy.sample_actions(
+            acts, _ = self.policy.sample_actions(
                 self.padded_states, self.mask, training=False)  # (1,n), int32
 
             # get alive_agents & all agents actions.
@@ -335,8 +268,6 @@ class Worker:
 
                 self.step += 1
 
-            i += 1
-
         trajectory["s"] = np.concatenate(trajectory["s"], axis=0).astype(np.float32)
         # (b,n,g,g,ch*n_frames)
         trajectory["a"] = np.concatenate(trajectory["a"], axis=0).astype(np.int32)
@@ -360,9 +291,7 @@ class Worker:
 
         R = values[-1, :, 0]  # (n,)
 
-        seq_len = trajectory["s"].shape[0]
-
-        for i in reversed(range(seq_len)):
+        for i in reversed(range(self.batch_size)):
             R = trajectory["r"][i] + \
                 self.gamma * (1. - trajectory["dones"][i].astype(np.float32)) * R  # (n,)
             trajectory["R"].insert(0, np.expand_dims(R, axis=0))  # insert (1,n) to the head

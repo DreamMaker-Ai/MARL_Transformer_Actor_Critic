@@ -16,3 +16,17 @@
 01_A3C/01_Baseline_rev2/result/
 
 01_A3C/01_Baseline_rev2/test_engagement/
+
+01_A3C/01_Baseline_rev2/
+
+01_A3C/dqn_results/
+
+01_A3C/01_Baseline_rev2a/__pycache__/
+
+01_A3C/01_Baseline_rev2a/log/
+
+01_A3C/01_Baseline_rev2a/models/
+
+01_A3C/01_Baseline_rev2a/result/
+
+01_A3C/01_Baseline_rev2a/test_engagement/

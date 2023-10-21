@@ -110,7 +110,7 @@ class MarlTransformerModel(tf.keras.models.Model):
 
         actions = np.concatenate(actions, axis=-1)  # (b,n)
 
-        return actions  # action=5 for the dead or dummy agents
+        return actions, scores  # action=5 for the dead or dummy agents, [score1, score2]
 
     def build_graph(self, mask):
         x = tf.keras.layers.Input(
@@ -187,7 +187,7 @@ def main():
     )
 
     """ Sample actions """
-    actions = marl_transformer.sample_actions(padded_obs, mask, training=False)  # (b,n), int32
+    actions, _ = marl_transformer.sample_actions(padded_obs, mask, training=False)  # (b,n), int32
 
     print('\n')
     print(policy_probs)

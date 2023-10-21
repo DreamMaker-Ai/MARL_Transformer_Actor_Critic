@@ -278,7 +278,7 @@ class Tester:
         self.save_test_conds()
         results = self.initialize_results()
 
-        for _ in range(self.env.config.max_episodes_test_play):
+        for i_episode in range(self.env.config.max_episodes_test_play):
             dones = {}
             dones['all_dones'] = False
             episode_reward = 0
@@ -289,8 +289,9 @@ class Tester:
 
             while not dones['all_dones']:
 
-                acts = self.policy.sample_actions(self.padded_states, self.mask, training=False)
-                # (1,n)
+                acts, scores = \
+                    self.policy.sample_actions(self.padded_states, self.mask, training=False)
+                # acts:(1,n), [score1, score2]:[(1,num_heads,n,n),(1,num_heads,n,n)]
 
                 # get alive_agents & all agents actions. action=0 <- do nothing
                 actions = {}  # For alive agents
@@ -422,6 +423,9 @@ class Tester:
                     self.mask = next_mask
 
                     self.step += 1
+
+            if i_episode % 100 == 0:
+                print(f'{i_episode} episodes completed!')
 
         result = summarize_results(results)
 
@@ -693,7 +697,7 @@ def main():
 
     from config import Config
 
-    is_debug = True  # True for debug
+    is_debug = False  # True for debug
 
     if is_debug:
         print("Debug mode starts. May cause ray memory error.")
@@ -735,14 +739,9 @@ def main():
     dummy_policy(padded_obs, mask)
 
     # Load model
-    """
-    Important: NEED change model file name: 
-        .index ->best_model.index, 
-        .data-00000-of-00001 -> best_model.data-00000-of-00001
-    """
-
-    load_dir = Path(__file__).parent / 'trial-1/models'
-    load_name = '/best_model/best_model'
+    load_dir = Path(__file__).parent / 'trial/models'
+    # load_name = '/best_model/'
+    load_name = '/global_policy_790000/'
 
     dummy_policy.load_weights(str(load_dir) + load_name)
 
@@ -752,7 +751,7 @@ def main():
     tester = Tester.remote()
 
     # Start test process
-    wip_tester = tester.test_play.remote(current_weights=weights, epsilon=epsilon)
+    wip_tester = tester.test_play.remote(current_weights=weights)
 
     # Get results
     finished_tester, _ = ray.wait([wip_tester], num_returns=1)
