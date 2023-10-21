@@ -143,9 +143,10 @@ def learn(num_workers=8, is_debug=False):
     """ Instantiate tester """
     tester = Tester.remote()
 
-    """ global policyの重みを取得し、それを使ってworker workersのプロセスを開始 """
+    """ get the weights of global policy, and starts worker process """
     weights = global_policy.get_weights()
-    work_in_progress = [worker.rollout_and_compute_grads.remote(weights) for worker in workers]
+    work_in_progress = \
+        [worker.rollout_and_collect_trajectory.remote(weights) for worker in workers]
     test_in_progress = tester.test_play.remote(weights)
 
     update_cycles = env.config.n0 + 1
@@ -153,19 +154,113 @@ def learn(num_workers=8, is_debug=False):
     test_cycles = update_cycles
 
     while update_cycles <= env.config.num_update_cycles:
-        # 完了したプロセス（job）を１つ取り出し、勾配とinfoを取り出す
-        finished_job, work_in_progress = ray.wait(work_in_progress, num_returns=1)
-        grads, info = ray.get(finished_job)[0]
-        worker_id = info["id"]
+        """ 1. Execute worker process, and get trajectory as list """
+        trajectories = ray.get(work_in_progress)
+
+        """ 2. Starts new worker process """
+        work_in_progress = \
+            [worker.rollout_and_collect_trajectory.remote(weights) for worker in workers]
+
+        """ 3. Reshape states, actions, masks, discounted_returns 
+                w = num_workers, b=env.config.batch_size=worker_rollout_steps
+                states: (w*b, n, g, g, ch*n_frames)
+                actions: (w*b, n), np.int32
+                masks: (w*b, n), bool
+                discounted_returns:  (w*b, n)
+        """
+        # Make lists
+        (states, actions, masks, discounted_returns) = [], [], [], []
+
+        for i in range(num_workers):
+            states.append(trajectories[i]["s"])  # append (b,n,g,g,ch*n_frames)
+            actions.append(trajectories[i]["a"])  # append (b,n)
+            masks.append(trajectories[i]["mask"])  # append (b,n)
+            discounted_returns.append(trajectories[i]["R"])  # append (b,n)
+
+        # lists -> np.array
+        states = np.array(states, dtype=np.float32)  # (w,b,n,g,g,ch*n_frames)
+        actions = np.array(actions, dtype=np.int32)  # (w,b,n), np.int32
+        masks = np.array(masks, dtype=bool)  # (w,b,n) bool
+        discounted_returns = np.array(discounted_returns, dtype=np.float32)  # (w,b,n)
+
+        # reshape to batch_size=w*b
+        batch_size = num_workers * env.config.batch_size  # w*b
+        states = states.reshape([batch_size, max_num_agents, grid_size, grid_size, ch * n_frames])
+        actions = actions.reshape([batch_size, max_num_agents])
+        masks = masks.reshape([batch_size, max_num_agents])
+        discounted_returns = discounted_returns.reshape([batch_size, max_num_agents])
+
+        """ 4. Use batch_data (batch_size=w*b) to compute loss and grads, 
+        then update trainable parameters """
+
+        with tf.GradientTape() as tape:
+            [policy_probs, values], _ = global_policy(states, masks, training=False)
+            # (w*b,n,action_dim), (w*b,n,1)
+
+            """ Compute log π(a|s) """
+            selected_actions = tf.convert_to_tensor(actions, dtype=tf.int32)  # (w*b,n)
+            # one_hot for dead or dummy agents' action (=-1) is zero vectors.
+            selected_actions_onehot = \
+                tf.one_hot(selected_actions, depth=action_space, dtype=tf.float32)
+            # (w*b,n,action_dim)
+
+            log_probs = \
+                selected_actions_onehot * tf.math.log(policy_probs + 1e-5)  # (w*b,n,action_dim)
+            selected_actions_log_probs = tf.reduce_sum(log_probs, axis=-1)  # (w*b,n)
+
+            """ Covert masks to tf.tensor (float32) """
+            masks = tf.convert_to_tensor(masks, dtype=tf.float32)  # (w*b,n)
+
+            """ Compute advantage and value loss """
+            # Compute num of alive agents every batch (time step)
+            num_alive_agents = tf.reduce_sum(masks, axis=-1)  # (w*b,)
+
+            advantages = discounted_returns - tf.squeeze(values, axis=-1)  # (w*b,n)
+            advantages = masks * advantages  # (w*b,n)
+
+            value_loss = tf.reduce_sum(advantages ** 2, axis=-1)  # (w*b,)
+            value_loss = value_loss / num_alive_agents  # (w*b,)
+            value_loss = tf.reduce_mean(value_loss)
+
+            mean_advantage = tf.reduce_mean(advantages)  # 表示用
+
+            """ Compute policy loss """
+            policy_loss = selected_actions_log_probs * tf.stop_gradient(advantages)  # (w*b,n)
+            policy_loss = masks * policy_loss  # (w*b,n)
+            policy_loss = tf.reduce_sum(policy_loss, axis=-1)  # (w*b,)
+            policy_loss = policy_loss / num_alive_agents  # (w*b,)
+            policy_loss = tf.reduce_mean(policy_loss)
+
+            """ Compute entropy """
+            entropy = - policy_probs * tf.math.log(policy_probs + 1e-5)  # (w*b,n,action_dim)
+            entropy = tf.reduce_mean(entropy, axis=-1)  # (w*b,n)
+            entropy = masks * entropy  # (w*b,n)
+            entropy = tf.reduce_sum(entropy, axis=-1)  # (w*b,)
+            entropy = entropy / num_alive_agents  # (w*b,)
+            entropy = tf.reduce_mean(entropy)
+
+            """ Compute total loss """
+            loss = env.config.value_loss_coef * value_loss - 1 * policy_loss - \
+                   1 * env.config.entropy_coef * entropy
+
+            loss = env.config.loss_coef * loss
+
+        grads = tape.gradient(loss, global_policy.trainable_variables)
+        grads, _ = tf.clip_by_global_norm(grads, 30)  # default=40->30
+
+        info = {
+            "policy_loss": -1 * policy_loss * env.config.loss_coef,
+            "value_loss": env.config.value_loss_coef * value_loss * env.config.loss_coef,
+            "entropy": -1 * env.config.entropy_coef * entropy * env.config.loss_coef,
+            "advantage": mean_advantage}
 
         # 勾配を適用し、global_policyを更新
         optimizer.apply_gradients(zip(grads, global_policy.trainable_variables))
 
         update_cycles += 1
 
-        # 新しいworker workerのプロセスを定義して開始
+        # get updated weights
         weights = global_policy.get_weights()
-        work_in_progress.extend([workers[worker_id].rollout_and_compute_grads.remote(weights)])
 
         finished_tester, _ = ray.wait([test_in_progress], timeout=0)
         if finished_tester:
@@ -239,4 +334,4 @@ def learn(num_workers=8, is_debug=False):
 if __name__ == '__main__':
     is_debug = False  # True for debug
 
-    learn(num_workers=6, is_debug=is_debug)
+    learn(num_workers=6, is_debug=is_debug)  # default num_workers=6

@@ -30,3 +30,13 @@
 01_A3C/01_Baseline_rev2a/result/
 
 01_A3C/01_Baseline_rev2a/test_engagement/
+
+02_A2C/01_Baseline/__pycache__/
+
+02_A2C/01_Baseline/log/
+
+02_A2C/01_Baseline/models/
+
+02_A2C/01_Baseline/result/
+
+02_A2C/01_Baseline/test_engagement/
