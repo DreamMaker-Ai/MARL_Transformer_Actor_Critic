@@ -148,8 +148,8 @@ def summarize_results(results):
     return result
 
 
-# @ray.remote
-@ray.remote(num_cpus=1, num_gpus=0)
+@ray.remote
+# @ray.remote(num_cpus=1, num_gpus=0)
 class Tester:
     def __init__(self):
         # Make a copy of environment

@@ -10,8 +10,8 @@ from utils_gnn import get_alive_agents_ids
 from utils_transformer import make_mask, make_padded_obs
 
 
-@ray.remote(num_cpus=1, num_gpus=0)  # cloud使用時
-# @ray.remote
+# @ray.remote(num_cpus=1, num_gpus=0)  # cloud使用時
+@ray.remote
 class Worker:
     def __init__(self, worker_id):
         """
