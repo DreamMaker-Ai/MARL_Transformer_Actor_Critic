@@ -246,7 +246,7 @@ def learn(num_workers=8, is_debug=False):
             loss = env.config.loss_coef * loss
 
         grads = tape.gradient(loss, global_policy.trainable_variables)
-        grads, _ = tf.clip_by_global_norm(grads, 30)  # default=40->30
+        grads, _ = tf.clip_by_global_norm(grads, 40)  # default=40
 
         info = {
             "policy_loss": -1 * policy_loss * env.config.loss_coef,
@@ -318,7 +318,7 @@ def learn(num_workers=8, is_debug=False):
             tf.summary.scalar("entropy", info["entropy"], step=update_cycles)
             tf.summary.scalar("advantage", info["advantage"], step=update_cycles)
 
-        if update_cycles % 5000 == 0:
+        if update_cycles % 1000 == 0:
             model_name = "global_policy_" + str(update_cycles)
             # global_policy.save('models/' + model_name)
             global_policy.save_weights('models/' + model_name + '/')
