@@ -42,3 +42,25 @@
 02_A2C/01_Baseline/test_engagement/
 
 01_A3C/01_Baseline_rev2a/trial/
+
+02_A2C/01_Baseline/gcp_trial_1/
+
+02_A2C/01_Baseline/test_trial_1/
+
+02_A2C/01_Baseline/test_trial_2/
+
+02_A2C/a3c_results/
+
+03_PPO/__pycache__/
+
+03_PPO/log/
+
+03_PPO/models/
+
+03_PPO/result/
+
+03_PPO/test_engagement/
+
+03_PPO/trial_1/
+
+03_PPO/trial_1a/

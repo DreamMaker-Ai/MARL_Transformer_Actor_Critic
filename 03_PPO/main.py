@@ -41,12 +41,18 @@ def write_config(config):
 
         'tau': config.tau,
         'gamma': config.gamma,
+        'gae_lambda': config.gae_lambda,
 
         'max_steps': config.max_steps,
 
         'learning_rate': config.learning_rate,
         'value_loss_coef': config.value_loss_coef,
         'entropy_coef': config.entropy_coef,
+
+        'update_batch_size': config.update_batch_size,
+        'opt_iter': config.opt_iter,
+        'clip_range': config.clip_range,
+        'clip_by_global_norm': config.clip_by_global_norm,
 
         'loss_coef': config.loss_coef,
 
@@ -124,10 +130,13 @@ def learn(num_workers=8, is_debug=False):
 
     mask = make_mask(alive_agents_ids, max_num_agents)  # (1,n)
 
-    # Build global model
+    # Build global model & old_global_model
     global_policy = MarlTransformerModel(config=env.config)
-    [policy_probs, values], scores = global_policy(padded_obs, mask, training=True)
+    [policy_probs, values], scores = global_policy(padded_obs, mask, training=False)  # build
     global_policy.summary()
+
+    old_global_policy = MarlTransformerModel(config=env.config)
+    old_global_policy(padded_obs, mask, training=False)  # build
 
     """ Load model if necessary """
     if env.config.model_dir:
@@ -161,101 +170,157 @@ def learn(num_workers=8, is_debug=False):
         work_in_progress = \
             [worker.rollout_and_collect_trajectory.remote(weights) for worker in workers]
 
-        """ 3. Reshape states, actions, masks, discounted_returns 
+        """ 3. Reshape states, actions, masks, expected_returns 
                 w = num_workers, b=env.config.batch_size=worker_rollout_steps
                 states: (w*b, n, g, g, ch*n_frames)
                 actions: (w*b, n), np.int32
                 masks: (w*b, n), bool
-                discounted_returns:  (w*b, n)
+                advantages: (w*b,n)
+                expected_returns:  (w*b, n)
         """
         # Make lists
-        (states, actions, masks, discounted_returns) = [], [], [], []
+        (states, actions, masks, advantages, expected_returns) = [], [], [], [], []
 
         for i in range(num_workers):
             states.append(trajectories[i]["s"])  # append (b,n,g,g,ch*n_frames)
             actions.append(trajectories[i]["a"])  # append (b,n)
             masks.append(trajectories[i]["mask"])  # append (b,n)
-            discounted_returns.append(trajectories[i]["R"])  # append (b,n)
+            advantages.append(trajectories[i]["advantage"])  # append (b,n)
+            expected_returns.append(trajectories[i]["R"])  # append (b,n)
 
         # lists -> np.array
         states = np.array(states, dtype=np.float32)  # (w,b,n,g,g,ch*n_frames)
         actions = np.array(actions, dtype=np.int32)  # (w,b,n), np.int32
         masks = np.array(masks, dtype=bool)  # (w,b,n) bool
-        discounted_returns = np.array(discounted_returns, dtype=np.float32)  # (w,b,n)
+        advantages = np.array(advantages, dtype=np.float32)  # (w,b,n)
+        expected_returns = np.array(expected_returns, dtype=np.float32)  # (w,b,n)
 
         # reshape to batch_size=w*b
-        batch_size = num_workers * env.config.batch_size  # w*b
-        states = states.reshape([batch_size, max_num_agents, grid_size, grid_size, ch * n_frames])
-        actions = actions.reshape([batch_size, max_num_agents])
-        masks = masks.reshape([batch_size, max_num_agents])
-        discounted_returns = discounted_returns.reshape([batch_size, max_num_agents])
+        data_size = num_workers * env.config.batch_size  # w*b
+        states = states.reshape([data_size, max_num_agents, grid_size, grid_size, ch * n_frames])
+        actions = actions.reshape([data_size, max_num_agents])
+        masks = masks.reshape([data_size, max_num_agents])
+        advantages = advantages.reshape([data_size, max_num_agents])
+        expected_returns = expected_returns.reshape([data_size, max_num_agents])
 
-        """ 4. Use batch_data (batch_size=w*b) to compute loss and grads, 
-        then update trainable parameters """
+        """ 
+        4. Use mini_batch (update_batch_size=ub) to compute loss and grads, 
+           then update trainable parameters.
+           Repeat opt_iter times.
+        """
+        batch_size = env.config.update_batch_size
+        opt_iter = env.config.opt_iter
 
-        with tf.GradientTape() as tape:
-            [policy_probs, values], _ = global_policy(states, masks, training=False)
-            # (w*b,n,action_dim), (w*b,n,1)
+        old_global_policy.set_weights(global_policy.get_weights())
 
-            """ Compute log π(a|s) """
-            selected_actions = tf.convert_to_tensor(actions, dtype=tf.int32)  # (w*b,n)
-            # one_hot for dead or dummy agents' action (=-1) is zero vectors.
-            selected_actions_onehot = \
-                tf.one_hot(selected_actions, depth=action_space, dtype=tf.float32)
-            # (w*b,n,action_dim)
+        # Randomly select minibatch indices: (opt_iter,ub)
+        indices = np.random.choice(range(states.shape[0]), size=(opt_iter, batch_size))
 
-            log_probs = \
-                selected_actions_onehot * tf.math.log(policy_probs + 1e-5)  # (w*b,n,action_dim)
-            selected_actions_log_probs = tf.reduce_sum(log_probs, axis=-1)  # (w*b,n)
+        sum_policy_loss = 0
+        sum_value_loss = 0
+        sum_entropy = 0
 
-            """ Covert masks to tf.tensor (float32) """
-            masks = tf.convert_to_tensor(masks, dtype=tf.float32)  # (w*b,n)
+        for i in range(opt_iter):
+            idx = indices[i]  # (ub,)
 
-            """ Compute advantage and value loss """
-            # Compute num of alive agents every batch (time step)
-            num_alive_agents = tf.reduce_sum(masks, axis=-1)  # (w*b,)
+            [old_policy_probs, old_values], _ = \
+                old_global_policy(states[idx], masks[idx], training=False)
+            # (ub,n,action_dim), (ub,n,1)
 
-            advantages = discounted_returns - tf.squeeze(values, axis=-1)  # (w*b,n)
-            advantages = masks * advantages  # (w*b,n)
+            with tf.GradientTape() as tape:
+                [policy_probs, values], _ = global_policy(states[idx], masks[idx], training=False)
+                # (ub,n,action_dim), (ub,n,1)
 
-            value_loss = tf.reduce_sum(advantages ** 2, axis=-1)  # (w*b,)
-            value_loss = value_loss / num_alive_agents  # (w*b,)
-            value_loss = tf.reduce_mean(value_loss)
+                """ Compute log π(a|s) """
+                selected_actions = tf.convert_to_tensor(actions[idx], dtype=tf.int32)  # (ub,n)
+                # one_hot for dead or dummy agents' action (=-1) is zero vectors.
+                selected_actions_onehot = \
+                    tf.one_hot(selected_actions, depth=action_space, dtype=tf.float32)
+                # (ub,n,action_dim)
 
-            mean_advantage = tf.reduce_mean(advantages)  # 表示用
+                log_probs = \
+                    selected_actions_onehot * tf.math.log(policy_probs + 1e-5)  # (ub,n,action_dim)
+                selected_actions_log_probs = tf.reduce_sum(log_probs, axis=-1)  # (ub,n)
 
-            """ Compute policy loss """
-            policy_loss = selected_actions_log_probs * tf.stop_gradient(advantages)  # (w*b,n)
-            policy_loss = masks * policy_loss  # (w*b,n)
-            policy_loss = tf.reduce_sum(policy_loss, axis=-1)  # (w*b,)
-            policy_loss = policy_loss / num_alive_agents  # (w*b,)
-            policy_loss = tf.reduce_mean(policy_loss)
+                """ Covert masks[idx] to tf.tensor (float32) """
+                masks_ub = tf.convert_to_tensor(masks[idx], dtype=tf.float32)  # (ub,n)
 
-            """ Compute entropy """
-            entropy = - policy_probs * tf.math.log(policy_probs + 1e-5)  # (w*b,n,action_dim)
-            entropy = tf.reduce_mean(entropy, axis=-1)  # (w*b,n)
-            entropy = masks * entropy  # (w*b,n)
-            entropy = tf.reduce_sum(entropy, axis=-1)  # (w*b,)
-            entropy = entropy / num_alive_agents  # (w*b,)
-            entropy = tf.reduce_mean(entropy)
+                # Compute num of alive agents every batch (time step)
+                num_alive_agents = tf.reduce_sum(masks_ub, axis=-1)  # (ub,)
 
-            """ Compute total loss """
-            loss = env.config.value_loss_coef * value_loss - 1 * policy_loss - \
-                   1 * env.config.entropy_coef * entropy
+                """ Compute lod π(a|s)_old """
+                log_old_probs = \
+                    selected_actions_onehot * tf.math.log(old_policy_probs + 1e-5)
+                # (ub,n,action_dim)
 
-            loss = env.config.loss_coef * loss
+                selected_actions_log_old_probs = tf.reduce_sum(log_old_probs, axis=-1)  # (ub,n)
 
-        grads = tape.gradient(loss, global_policy.trainable_variables)
-        grads, _ = tf.clip_by_global_norm(grads, 30)  # default=30
+                """ Compute Policy loss """
+                ratio = \
+                    tf.exp(selected_actions_log_probs - selected_actions_log_old_probs)  # (ub.n)
+
+                ratio_clipped = \
+                    tf.clip_by_value(ratio, 1 - env.config.clip_range, 1 + env.config.clip_range)
+                # (ub,n)
+
+                ploss_unclipped = ratio * advantages[idx]  # (ub,n)
+                ploss_clipped = ratio_clipped * advantages[idx]  # (ub,n)
+
+                ploss = tf.minimum(ploss_unclipped, ploss_clipped)  # (ub,n)
+                ploss = masks_ub * ploss  # (ub,n)
+                ploss = tf.reduce_sum(ploss, axis=-1)  # (ub,)
+                ploss = ploss / num_alive_agents  # (ub,)
+
+                policy_loss = tf.reduce_mean(ploss)  # (ub,)
+
+                """ Compute Value loss """
+                old_values = tf.reshape(old_values, shape=(batch_size, max_num_agents))
+                # (ub,n,1)->(ub,n)
+                values = tf.reshape(values, shape=(batch_size, max_num_agents))  # (ub,n,1)->(ub,n)
+
+                vpred_clipped = old_values + \
+                                tf.clip_by_value(values - old_values,
+                                                 -env.config.clip_range, env.config.clip_range)
+                # (ub,n)
+
+                vloss = tf.maximum(tf.square(values - expected_returns[idx]),
+                                   tf.square(vpred_clipped - expected_returns[idx]))  # (ub,n)
+
+                vloss = masks_ub * vloss  # (ub,n)
+                vloss = tf.reduce_sum(vloss, axis=-1)  # (ub,)
+                vloss = vloss / num_alive_agents  # (ub,)
+                value_loss = tf.reduce_mean(vloss)
+
+                """ Compute entropy """
+                entropy = - policy_probs * tf.math.log(policy_probs + 1e-5)  # (ub,n,action_dim)
+                entropy = tf.reduce_mean(entropy, axis=-1)  # (ub,n)
+                entropy = masks_ub * entropy  # (ub,n)
+                entropy = tf.reduce_sum(entropy, axis=-1)  # (ub,)
+                entropy = entropy / num_alive_agents  # (ub,)
+                entropy = tf.reduce_mean(entropy)
+
+                """ Compute total loss """
+                loss = env.config.value_loss_coef * value_loss - 1 * policy_loss - \
+                       1 * env.config.entropy_coef * entropy
+
+                loss = env.config.loss_coef * loss
+
+            grads = tape.gradient(loss, global_policy.trainable_variables)
+            grads, _ = tf.clip_by_global_norm(grads, env.config.clip_by_global_norm)
+
+            # For display (tensorboard)
+            sum_policy_loss += -1. * policy_loss * env.config.loss_coef
+            sum_value_loss += env.config.value_loss_coef * value_loss * env.config.loss_coef
+            sum_entropy += -1. * env.config.entropy_coef * entropy * env.config.loss_coef
+
+            # 勾配を適用し、global_policyを更新
+            optimizer.apply_gradients(zip(grads, global_policy.trainable_variables))
 
         info = {
-            "policy_loss": -1 * policy_loss * env.config.loss_coef,
-            "value_loss": env.config.value_loss_coef * value_loss * env.config.loss_coef,
-            "entropy": -1 * env.config.entropy_coef * entropy * env.config.loss_coef,
-            "advantage": mean_advantage}
-
-        # 勾配を適用し、global_policyを更新
-        optimizer.apply_gradients(zip(grads, global_policy.trainable_variables))
+            "policy_loss": sum_policy_loss,
+            "value_loss": sum_value_loss,
+            "entropy": sum_entropy
+        }
 
         update_cycles += 1
 
@@ -316,7 +381,6 @@ def learn(num_workers=8, is_debug=False):
             tf.summary.scalar("policy_loss", info["policy_loss"], step=update_cycles)
             tf.summary.scalar("value_loss", info["value_loss"], step=update_cycles)
             tf.summary.scalar("entropy", info["entropy"], step=update_cycles)
-            tf.summary.scalar("advantage", info["advantage"], step=update_cycles)
 
         if update_cycles % 500 == 0:
             model_name = "global_policy_" + str(update_cycles)

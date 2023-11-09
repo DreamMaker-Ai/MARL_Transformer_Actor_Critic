@@ -12,7 +12,7 @@ def main():
         'run-.-tag-num_no_contest.csv'
     ]
     parent_dir = \
-        '01_A3C/01_Baseline_rev2/trial/'
+        '02_A2C/01_Baseline/test_trial_2/'
     filelist = 'history/'
 
     colorlist = ['r', 'b', 'g', 'm', 'y']
