@@ -11,7 +11,7 @@ def main():
         'run-.-tag-mean_episode_len of tests.csv'
     ]
     parent_dir = \
-        '02_A2C/01_Baseline/test_trial_2/'
+        '03_PPO/trial_gcp/'
     filelist = 'history/'
 
     colorlist = ['r', 'm', 'g', 'b', 'y']

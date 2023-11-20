@@ -760,9 +760,9 @@ def main():
     dummy_policy(padded_obs, mask)
 
     # Load model
-    load_dir = Path(__file__).parent / 'test_trial_2/models'
-    load_name = '/best_model/'
-    # load_name = '/global_policy_790000/'
+    load_dir = Path(__file__).parent / 'trial_gcp/models'
+    # load_name = '/best_model/'
+    load_name = '/global_policy_59000/'
 
     dummy_policy.load_weights(str(load_dir) + load_name)
 

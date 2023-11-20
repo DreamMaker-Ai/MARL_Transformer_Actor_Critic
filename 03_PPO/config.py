@@ -16,15 +16,15 @@ class Config:
             # self.actor_cycles = 0  # Not used in actor-criitic
 
         # Define simulation cond.
-        self.show_each_episode_result = False  # mainly for debug
+        self.show_each_episode_result = True  # mainly for debug
         self.draw_win_distributions = False  # mainly for debug
-        self.max_episodes_test_play = 50  # default=50 for training
+        self.max_episodes_test_play = 1  # default=50 for training
 
         # Animation setting
-        self.make_animation = False  # Use self.max_episodes_test_play=1
+        self.make_animation = True  # Use self.max_episodes_test_play=1
 
         # Time plot of a test setting
-        self.make_time_plot = False  # Use self.max_episodes_test_play=1
+        self.make_time_plot = True  # Use self.max_episodes_test_play=1
 
         # Define environment parameters
         self.grid_size = 15  # default=15
@@ -61,9 +61,9 @@ class Config:
         self.gamma = 0.96
         self.gae_lambda = 0.96  # GAE
 
-        self.max_steps = 100  # Default=100
+        self.max_steps = 100  # Default=100 (200 for robustness)
 
-        self.learning_rate = 5e-5  # Default=5e-5 (Annihilation=1e-5)
+        self.learning_rate = 5e-5  # Default=5e-5 (Annihilation=1e-5->2e-6)
         self.value_loss_coef = 5.0  # Default=5.0
         self.entropy_coef = 0.01  # Default=0.01
 
