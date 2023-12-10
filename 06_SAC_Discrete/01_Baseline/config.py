@@ -12,7 +12,7 @@ class Config:
         self.alpha_dir = None
 
         if self.model_dir:  # starting steps for continual training
-            self.n0 = 0  # learner update cycles. Should be read from tensorboard
+            self.n0 = 84500  # learner update cycles. Should be read from tensorboard
         else:
             self.n0 = 0
 

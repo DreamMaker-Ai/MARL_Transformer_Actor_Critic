@@ -9,8 +9,8 @@ from models import MarlTransformerModel
 from utils_transformer import make_mask, make_padded_obs
 
 
-# @ray.remote
-@ray.remote(num_cpus=1, num_gpus=1)
+@ray.remote
+# @ray.remote(num_cpus=1, num_gpus=1)
 class Learner:
     def __init__(self):
         self.env = BattleFieldStrategy()
