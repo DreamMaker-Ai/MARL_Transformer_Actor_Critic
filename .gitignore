@@ -91,3 +91,33 @@
 
 04_MAPPO/02_Small_Global_State/test_trial/
 
+
+04_MAPPO/01_Baseline/
+
+04_MAPPO/02_Reduced_Global_State/models_architecture/
+
+04_MAPPO/02_Reduced_Global_State/test_trial/
+
+04_MAPPO/02_Reduced_Global_State/__pycache__/
+
+04_MAPPO/
+
+05_MAPPO-VDN/
+
+06_SAC_Discrete/1_Prelininary_olds/
+
+06_SAC_Discrete/2_Preliminary/
+
+06_SAC_Discrete/3_Preliminary_prioritized/
+
+06_SAC_Discrete/01_Baseline/__pycache__/
+
+06_SAC_Discrete/01_Baseline/log/
+
+06_SAC_Discrete/01_Baseline/models/
+
+06_SAC_Discrete/01_Baseline/old/
+
+06_SAC_Discrete/01_Baseline/test_engagement/
+
+06_SAC_Discrete/01_Baseline/trial/
