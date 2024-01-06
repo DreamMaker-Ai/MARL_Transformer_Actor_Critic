@@ -438,7 +438,7 @@ class Tester:
 
             save_name = '/best_win_alpha'
             logalpha = current_weights[1].numpy()
-            np.save(str(save_dir)+save_name, logalpha)
+            np.save(str(save_dir) + save_name, logalpha)
 
             self.num_max_win = result['num_red_win']
 
@@ -450,7 +450,7 @@ class Tester:
 
             save_name = '/best_return_alpha'
             logalpha = current_weights[1].numpy()
-            np.save(str(save_dir)+save_name, logalpha)
+            np.save(str(save_dir) + save_name, logalpha)
 
             self.max_return = result['episode_rewards']
 
@@ -509,6 +509,8 @@ class Tester:
         blue_platoons_force = np.array(self.blue_platoons_force_list)
         blue_platoons_efficiency = np.array(self.blue_platoons_efficiency_list)
         blue_platoons_ef = np.array(self.blue_platoons_ef_list)
+
+        num_red_groups = np.array(self.num_red_groups_list)
 
         fig1, axe1 = plt.subplots(nrows=2, ncols=2, squeeze=False, figsize=(14, 8))
 
@@ -582,18 +584,12 @@ class Tester:
         axe3[0, 1].set_title('Remaining effective force of platoons + companies')
         axe3[0, 1].grid()
 
-        axe3[1, 0].plot(steps,
-                        (red_platoons_efficiency + red_companies_efficiency) /
-                        (red_platoons_num + red_companies_num + eps), 'r')
-        axe3[1, 0].plot(steps,
-                        (blue_platoons_efficiency + blue_companies_efficiency) /
-                        (blue_platoons_num + blue_companies_num + eps), 'b')
-        axe3[1, 0].set_title('Average remaining efficiency of platoons + companies')
+        axe3[1, 0].plot(steps, num_red_groups, 'r')
+        axe3[1, 0].set_title('Num of red clusters')
         axe3[1, 0].grid()
 
-        axe3[1, 1].plot(steps, red_platoons_ef + red_companies_ef, 'r')
-        axe3[1, 1].plot(steps, blue_platoons_ef + blue_companies_ef, 'b')
-        axe3[1, 1].set_title('Remaining efficiency * force of platoons + companies')
+        axe3[1, 1].plot(steps, (red_platoons_num + red_companies_num) / num_red_groups, 'r')
+        axe3[1, 1].set_title(' Num of alive red agents / Num of red clusters')
         axe3[1, 1].grid()
 
         fig3.savefig(dir_save + '/teams', dpi=300)
@@ -664,6 +660,9 @@ class Tester:
         self.blue_companies_ef_list.append(blue_companies_ef)
         self.blue_companies_num_list.append(blue_companies_num)
 
+        num_group = self.count_group()
+        self.num_red_groups_list.append(num_group)
+
     def initialize_time_plot(self):
         self.steps_list = []
         self.red_platoons_force_list = []
@@ -682,6 +681,7 @@ class Tester:
         self.blue_companies_efficiency_list = []
         self.blue_companies_ef_list = []
         self.blue_companies_num_list = []
+        self.num_red_groups_list = []
 
     def save_test_conds(self):
         test_conds = {
@@ -702,6 +702,27 @@ class Tester:
 
         with open(dir_save + '/test_conds.json', 'w') as f:
             json.dump(test_conds, f, indent=5)
+
+    def count_group(self):
+        """ reds の cluster数をカウント"""
+        x = []
+        y = []
+        for red in self.env.reds:
+            if red.alive:
+                x.append(red.pos[0])
+                y.append(red.pos[1])
+
+        x = np.array(x)
+        y = np.array(y)
+
+        group_count = 0
+        for i in range(self.env.config.grid_size):
+            for j in range(self.env.config.grid_size):
+                num = np.sum(np.where(x == i, 1, 0) * np.where(y == j, 1, 0))
+                if num > 0:
+                    group_count += 1
+
+        return group_count
 
 
 def main():
@@ -756,12 +777,13 @@ def main():
     dummy_policy(padded_obs, mask)
 
     # Load model
-    load_dir = Path(__file__).parent / 'trial/models'
-    # load_name = '/best_model/'
-    load_name = '/model_100/'
+    load_dir = Path(__file__).parent / 'trial_3/models'
+    load_name = '/model_188000/'
+    # load_name = '/best_return_model/'
     dummy_policy.load_weights(str(load_dir) + load_name)
 
-    load_name = '/alpha_100.npy'
+    load_name = '/alpha_188000.npy'
+    # load_name = '/best_return_alpha.npy'
     logalpha = np.load(str(load_dir) + load_name)
     logalpha = tf.Variable(logalpha)
 

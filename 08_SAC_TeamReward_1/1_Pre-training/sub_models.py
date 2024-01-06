@@ -2,6 +2,7 @@ import os.path
 
 import tensorflow as tf
 import numpy as np
+import tensorflow_probability as tfp
 
 from config import Config
 from utils_transformer import make_mask, make_padded_obs
@@ -312,11 +313,11 @@ class PolicyModel(tf.keras.models.Model):
     :param max_num_agents=15=n
     :return: Policy probs, (None,n,action_dim)=(None,15,5)
 
-    Model: "policy_prob"
+    Model: "policy_logits"
     _________________________________________________________________
      Layer (type)                Output Shape              Param #
     =================================================================
-     input_5 (InputLayer)        [(None, 15, 256)]         0
+     input_1 (InputLayer)        [(None, 15, 256)]         0
 
      time_distributed_6 (TimeDis  (None, 15, 768)          197376
      tributed)
@@ -327,11 +328,8 @@ class PolicyModel(tf.keras.models.Model):
      time_distributed_9 (TimeDis  (None, 15, 5)            1285
      tributed)
 
-     time_distributed_10 (TimeDi  (None, 15, 5)            0
-     stributed)
-
-     tf.math.multiply_4 (TFOpLam  (None, 15, 5)            0
-     bda)
+     tf.math.multiply (TFOpLambd  (None, 15, 5)            0
+     a)
 
     =================================================================
     Total params: 395,525
@@ -373,14 +371,11 @@ class PolicyModel(tf.keras.models.Model):
                 )
             )
 
-        self.softmax = tf.keras.layers.TimeDistributed(
-            tf.keras.layers.Softmax(axis=-1)
-        )
-
     @tf.function
     def call(self, inputs, mask, training=True):
         # inputs: (None,n,hidden_dim)=(None,15,256)
         # mask: (None,n)=(None,15), bool
+        # prob_logit=0 for dead / dummy agents
 
         x1 = self.dense1(inputs)  # (None,n,hidden_dim*3)
 
@@ -390,8 +385,6 @@ class PolicyModel(tf.keras.models.Model):
 
         logits = self.dense3(x1)  # (None,n,action_dim)
 
-        policy_prob = self.softmax(logits)  # (None,n,action_dim)
-
         # mask out dead or dummy agents by 0
         broadcast_float_mask = \
             tf.expand_dims(
@@ -399,9 +392,9 @@ class PolicyModel(tf.keras.models.Model):
                 axis=-1
             )  # Add feature dim for broadcast, (None,n,1)=(None,15,1)
 
-        policy_prob = policy_prob * broadcast_float_mask  # (None,n,action_dim)
+        logits = logits * broadcast_float_mask  # (None,n,action_dim)
 
-        return policy_prob
+        return logits
 
     def build_graph(self, mask):
         x = tf.keras.layers.Input(
@@ -412,49 +405,63 @@ class PolicyModel(tf.keras.models.Model):
         model = tf.keras.models.Model(
             inputs=[x],
             outputs=self.call(x, mask),
-            name='policy_prob'
+            name='policy_logits'
         )
 
         return model
 
 
-class ValueModel(tf.keras.models.Model):
+class SoftQModel(tf.keras.models.Model):
     """
     :param action_dim=5
     :param hidden_dim=256
     :param max_num_agents=15=n
-    :return: Values, (None,n,1)=(None,15,1)
+    :return: soft_Qs, (None,n,action_dim)=(None,15,5)
 
     Model: "value_model"
-    _________________________________________________________________
-     Layer (type)                Output Shape              Param #
-    =================================================================
-     input_7 (InputLayer)        [(None, 15, 256)]         0
+    __________________________________________________________________________________________________
+     Layer (type)                   Output Shape         Param #     Connected to
+    ==================================================================================================
+     input_1 (InputLayer)           [(None, 15, 256)]    0           []
 
-     time_distributed_11 (TimeDi  (None, 15, 768)          197376
-     stributed)
+     time_distributed_11 (TimeDistr  (None, 15, 768)     197376      ['input_1[0][0]']
+     ibuted)
 
-     time_distributed_13 (TimeDi  (None, 15, 256)          196864
-     stributed)
+     time_distributed_14 (TimeDistr  (None, 15, 768)     197376      ['input_1[0][0]']
+     ibuted)
 
-     time_distributed_14 (TimeDi  (None, 15, 1)            257
-     stributed)
+     time_distributed_12 (TimeDistr  (None, 15, 256)     196864      ['time_distributed_11[0][0]']
+     ibuted)
 
-     tf.math.multiply_6 (TFOpLam  (None, 15, 1)            0
-     bda)
+     time_distributed_15 (TimeDistr  (None, 15, 256)     196864      ['time_distributed_14[0][0]']
+     ibuted)
 
-    =================================================================
-    Total params: 394,497
-    Trainable params: 394,497
+     time_distributed_13 (TimeDistr  (None, 15, 5)       1285        ['time_distributed_12[0][0]']
+     ibuted)
+
+     time_distributed_16 (TimeDistr  (None, 15, 5)       1285        ['time_distributed_15[0][0]']
+     ibuted)
+
+     tf.math.multiply (TFOpLambda)  (None, 15, 5)        0           ['time_distributed_13[0][0]']
+
+     tf.math.multiply_1 (TFOpLambda  (None, 15, 5)       0           ['time_distributed_16[0][0]']
+     )
+
+    ==================================================================================================
+    Total params: 791,050
+    Trainable params: 791,050
     Non-trainable params: 0
-    _________________________________________________________________
+    __________________________________________________________________________________________________
+
     """
 
     def __init__(self, config, **kwargs):
-        super(ValueModel, self).__init__(**kwargs)
+        super(SoftQModel, self).__init__(**kwargs)
 
         self.config = config
+        self.action_dim = config.action_dim
 
+        # For Q1
         self.dense1 = \
             tf.keras.layers.TimeDistributed(
                 tf.keras.layers.Dense(
@@ -463,9 +470,9 @@ class ValueModel(tf.keras.models.Model):
                 )
             )
 
-        self.dropoout1 = tf.keras.layers.TimeDistributed(
-            tf.keras.layers.Dropout(rate=self.config.dropout_rate)
-        )
+        # self.dropoout1 = tf.keras.layers.TimeDistributed(
+        #     tf.keras.layers.Dropout(rate=self.config.dropout_rate)
+        # )
 
         self.dense2 = \
             tf.keras.layers.TimeDistributed(
@@ -478,28 +485,70 @@ class ValueModel(tf.keras.models.Model):
         self.dense3 = \
             tf.keras.layers.TimeDistributed(
                 tf.keras.layers.Dense(
-                    units=1,
+                    units=self.action_dim,
+                    activation=None,
+                )
+            )
+
+        # For Q2
+        self.dense10 = \
+            tf.keras.layers.TimeDistributed(
+                tf.keras.layers.Dense(
+                    units=self.config.hidden_dim * 3,
+                    activation='relu',
+                )
+            )
+
+        # self.dropoout10 = tf.keras.layers.TimeDistributed(
+        #     tf.keras.layers.Dropout(rate=self.config.dropout_rate)
+        # )
+
+        self.dense20 = \
+            tf.keras.layers.TimeDistributed(
+                tf.keras.layers.Dense(
+                    units=self.config.hidden_dim,
+                    activation='relu',
+                )
+            )
+
+        self.dense30 = \
+            tf.keras.layers.TimeDistributed(
+                tf.keras.layers.Dense(
+                    units=self.action_dim,
                     activation=None,
                 )
             )
 
     @tf.function
     def call(self, inputs, mask, training=True):
-        x1 = self.dense1(inputs)  # (None,n,hidden_dim)
-        # x1 = self.dropoout1(x1, training=training)
-        x1 = self.dense2(x1)
-        values = self.dense3(x1)  # (None,n,1)
+        """
+        Q1, Q2 = 0 for dead / dummy agents
+        """
 
-        # mask out dead or dummy agents by 0
+        """ mask out dead or dummy agents by 0 """
         broadcast_float_mask = \
             tf.expand_dims(
                 tf.cast(mask, 'float32'),
                 axis=-1
             )  # Add feature dim for broadcast, (None,n,1)
 
-        values = values * broadcast_float_mask  # (None,n,1)
+        """ Q1 """
+        x1 = self.dense1(inputs)  # (None,n,hidden_dim)
+        # x1 = self.dropoout1(x1, training=training)
+        x1 = self.dense2(x1)
+        qs1 = self.dense3(x1)  # (None,n,action_dim)
 
-        return values
+        qs1 = qs1 * broadcast_float_mask  # (None,n,action_dim)
+
+        """ Q2 """
+        x10 = self.dense10(inputs)  # (None,n,hidden_dim)
+        # x10 = self.dropoout10(x10, training=training)
+        x10 = self.dense20(x10)
+        qs10 = self.dense30(x10)  # (None,n,action_dim)
+
+        qs10 = qs10 * broadcast_float_mask  # (None,n,action_dim)
+
+        return qs1, qs10
 
     def build_graph(self, mask):
         x = tf.keras.layers.Input(
@@ -587,7 +636,8 @@ def main():
 
     policy_model = PolicyModel(config=config)
 
-    policy_prob = policy_model(features_mha, mask)
+    policy_logits = policy_model(features_mha, mask)
+    print(f'policy_logits.shape: {policy_logits.shape}, {policy_logits}')
 
     """ remove tf.function for summary """
     """
@@ -605,17 +655,18 @@ def main():
 
     """ value_model """
 
-    value_model = ValueModel(config=config)
+    q_model = SoftQModel(config=config)
 
-    values = value_model(features_mha, mask)
+    qs1, qs2 = q_model(features_mha, mask)
+    print(f'Q1s.shape: {qs1.shape}, Q2s.shape: {qs2.shape}')
 
     """ remove tf.function for summary """
     """
-    value_model.build_graph(mask).summary()
+    q_model.build_graph(mask).summary()
 
     tf.keras.utils.plot_model(
-        value_model.build_graph(mask),
-        to_file=dir_name + '/value_model',
+        q_model.build_graph(mask),
+        to_file=dir_name + '/q_model',
         show_shapes=True,
         show_layer_activations=True,
         show_dtype=True,

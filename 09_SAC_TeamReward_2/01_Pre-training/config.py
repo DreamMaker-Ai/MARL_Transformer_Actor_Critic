@@ -5,27 +5,27 @@ import gym
 class Config:
     def __init__(self):
 
-        # self.model_dir = 'models/model_105000/'  # newest file -> 'ls -ltr'
-        self.model_dir = None
+        self.model_dir = 'models/model_355000/'  # newest file -> 'ls -ltr'
+        # self.model_dir = None
 
-        # self.alpha_dir = 'models/alpha_105000.npy'  # logalpha
-        self.alpha_dir = None
+        self.alpha_dir = 'models/alpha_355000.npy'  # logalpha
+        # self.alpha_dir = None
 
         if self.model_dir:  # starting steps for continual training
-            self.n0 = 121000  # learner update cycles. Should be read from tensorboard
+            self.n0 = 355000  # learner update cycles. Should be read from tensorboard
         else:
             self.n0 = 0
 
         # Define simulation cond.
-        self.show_each_episode_result = True  # mainly for debug
+        self.show_each_episode_result = False  # mainly for debug
         self.draw_win_distributions = False  # mainly for debug
-        self.max_episodes_test_play = 1  # default=50 for training
+        self.max_episodes_test_play = 50  # default=50 for training
 
         # Animation setting
-        self.make_animation = True  # Use self.max_episodes_test_play=1
+        self.make_animation = False  # Use self.max_episodes_test_play=1
 
         # Time plot of a test setting
-        self.make_time_plot = True  # Use self.max_episodes_test_play=1
+        self.make_time_plot = False  # Use self.max_episodes_test_play=1
 
         # Define environment parameters
         self.grid_size = 15  # default=15
@@ -62,15 +62,15 @@ class Config:
         self.worker_rollout_steps = 16  # default=16
         self.num_update_cycles = 100000000
         self.worker_rollouts_before_train = 50  # Default=50
-        self.batch_size = 128  # default=16
+        self.batch_size = 16  # default=16
 
-        self.num_minibatchs = 1  # default=3
+        self.num_minibatchs = 3  # default=3
         self.tau = 0.01  # Soft update of target network
         self.gamma = 0.96
-        self.max_steps = 200  # Default=100. 200 for robustness
+        self.max_steps = 100  # Default=100. 200 for robustness
 
-        self.learning_rate = 5e-5 * 3  # Default=5e-5
-        self.alpha_learning_rate = 1e-5 * 3  # Default=1e-5
+        self.learning_rate = 5e-5  # Default=5e-5
+        self.alpha_learning_rate = 1e-5  # Default=1e-5
 
         self.ploss_coef = 0.1  # For policy_loss, Default=0.1
         self.aloss_coef = 0.1  # For entropy_loss, Default=0.1
@@ -89,10 +89,10 @@ class Config:
         self.agent_forces = (50, 150)
 
         # Define possible red / blue agent parameters
-        self.red_platoons = (7, 7)  # num range of red platoons, default=(3,10)
+        self.red_platoons = (3, 10)  # num range of red platoons, default=(3,10)
         self.red_companies = (2, 5)  # num range of red companies, default=(2,5)
 
-        self.blue_platoons = (45, 45)  # num range of blue platoons, default=(3,10)
+        self.blue_platoons = (3, 10)  # num range of blue platoons, default=(3,10)
         self.blue_companies = (2, 5)  # num range of blue companies, default=(2,5)
 
         self.efficiencies_red = (0.3, 0.5)  # range

@@ -3,8 +3,8 @@ import tensorflow as tf
 import tensorflow_probability as tfp
 import os
 
-from config import Config
-from sub_models import CNNModel, MultiHeadAttentionModel, PolicyModel, ValueModel
+from config_finetuning import Config
+from sub_models import CNNModel, MultiHeadAttentionModel, PolicyModel, SoftQModel
 from utils_transformer import make_mask, make_padded_obs
 
 
@@ -12,7 +12,8 @@ class MarlTransformerModel(tf.keras.models.Model):
     """
     :inputs: padded obs (None,n,g,g,ch*n_frames), n=max_num_agents
              mask (None,n,n)
-    :return: [policy_probs, values]: [(None,n,action_dim), (None,n,1)]
+    :return: [policy_logits, [q1s, q2s]]:
+                    [(None,n,action_dim), [(None,n,action_dim),(None,n,action_dim)]]
              [score1, score2]: [(None,num_heads,n,n),(None,num_heads,n,n)]
 
     Model: "marl_transformer"
@@ -36,12 +37,12 @@ class MarlTransformerModel(tf.keras.models.Model):
      policy_model (PolicyModel)     (None, 15, 5)        395525      ['multi_head_attention_model_1[0]
                                                                      [0]']
 
-     value_model (ValueModel)       (None, 15, 1)        394497      ['multi_head_attention_model_1[0]
-                                                                     [0]']
+     soft_q_model (SoftQModel)      ((None, 15, 5),      791050      ['multi_head_attention_model_1[0]
+                                     (None, 15, 5))                  [0]']
 
     ==================================================================================================
-    Total params: 2,101,126
-    Trainable params: 2,101,126
+    Total params: 2,497,679
+    Trainable params: 2,497,679
     Non-trainable params: 0
     __________________________________________________________________________________________________
     """
@@ -63,7 +64,7 @@ class MarlTransformerModel(tf.keras.models.Model):
         self.mha2 = MultiHeadAttentionModel(config=self.config)
 
         self.policy = PolicyModel(config=self.config)
-        self.value = ValueModel(config=self.config)
+        self.value = SoftQModel(config=self.config)
 
     @tf.function
     def call(self, x, mask, training=True):
@@ -86,19 +87,36 @@ class MarlTransformerModel(tf.keras.models.Model):
         features_mha2, score2 = self.mha2(features_mha1, mask, training=training)
 
         """ Policy (policy_probs output) """
-        policy_probs = self.policy(features_mha2, mask, training=training)  # (None,n,action_dim)
+        policy_logits = self.policy(features_mha2, mask, training=training)  # (None,n,action_dim)
 
-        """ Values """
-        values = self.value(features_mha2, mask, training=training)  # (None,n,1)
+        """ [q1s, q2s] """
+        [q1s, q2s] = self.value(features_mha2, mask, training=training)
+        # [(None,n,action_dim),(None,n,action_dim)]]
 
-        return [policy_probs, values], [score1, score2]
+        return [policy_logits, [q1s, q2s]], [score1, score2]
+
+    @staticmethod
+    def process_action(action_logits, mask):
+        """ probs=0, log_probs=0 of dead / dummy agents """
+
+        broadcast_float_mask = tf.expand_dims(tf.cast(mask, 'float32'), axis=-1)  # (None,n,1)
+
+        probs = tf.nn.softmax(action_logits)  # (None,n,action_dim)
+        probs = probs * broadcast_float_mask  # (None,n,action_dim)
+
+        log_probs = tf.nn.log_softmax(action_logits)  # (None,n,action_dim)
+        log_probs = log_probs * broadcast_float_mask  # (None,n,action_dim)
+
+        return probs, log_probs
 
     def sample_actions(self, states, mask, training=False):
         # states : (b,n,g,g,ch*n_frames)
         # mask: (b,n)
         """ action=5 if policyprobs=[0,0,0,0,0], that is or the dead or dummy agents """
 
-        [policy_probs, values], scores = self(states, mask, training=training)
+        [policy_logits, _], scores = self(states, mask, training=training)
+
+        policy_probs, _ = self.process_action(policy_logits, mask)
 
         num_agents = self.config.max_num_red_agents
         actions = []
@@ -128,11 +146,11 @@ class MarlTransformerModel(tf.keras.models.Model):
         features_mha2, score2 = self.mha2(features_mha1, mask, training=True)
 
         policy_probs = self.policy(features_mha2, mask)
-        values = self.value(features_mha2, mask)
+        [q1s, q2s] = self.value(features_mha2, mask)
 
         model = tf.keras.models.Model(
             inputs=[x],
-            outputs=[[policy_probs, values], [score1, score2]],
+            outputs=[[policy_probs, [q1s, q2s]], [score1, score2]],
             name='marl_transformer',
         )
 
@@ -170,7 +188,7 @@ def main():
     """ Make model """
     marl_transformer = MarlTransformerModel(config=config)
 
-    [policy_probs, values], scores = marl_transformer(padded_obs, mask, training=True)
+    [policy_logits, [q1s, q2s]], scores = marl_transformer(padded_obs, mask, training=True)
 
     """ Summary """
     print('\n')
@@ -186,11 +204,15 @@ def main():
         dpi=96 * 3
     )
 
+    probs, log_probs = marl_transformer.process_action(policy_logits, mask)
+    print(f"probs: {probs}, {probs.shape}")
+    print(f"log_probs: {log_probs}, {log_probs.shape}")
+
     """ Sample actions """
     actions, _ = marl_transformer.sample_actions(padded_obs, mask, training=False)  # (b,n), int32
 
     print('\n')
-    print(policy_probs)
+    print(probs)
     print(actions)
 
 

@@ -1,11 +1,10 @@
 import ray
 import numpy as np
-import tensorflow as tf
 
 from collections import deque
 
 from models import MarlTransformerModel
-from battlefield_strategy import BattleFieldStrategy
+from battlefield_strategy_team_reward import BattleFieldStrategy
 from utils_gnn import get_alive_agents_ids
 from utils_transformer import make_mask, make_padded_obs
 
@@ -13,29 +12,27 @@ from utils_transformer import make_mask, make_padded_obs
 # @ray.remote(num_cpus=1, num_gpus=0)  # cloud使用時
 @ray.remote
 class Worker:
-    def __init__(self, worker_id):
+    def __init__(self, pid):
         """
         batch_size=t_max
         """
-        self.worker_id = worker_id
+        self.pid = pid
 
         self.env = BattleFieldStrategy()
-        self.gamma = self.env.config.gamma
-        self.gae_lambda = self.env.config.gae_lambda
-        self.value_loss_coef = self.env.config.value_loss_coef
-        self.entropy_coef = self.env.config.entropy_coef
-        self.loss_coef = self.env.config.loss_coef
         self.batch_size = self.env.config.batch_size
         self.n_frames = self.env.config.n_frames
 
         self.action_space_dim = self.env.action_space.n
 
         # Make a policy network
-        self.policy = MarlTransformerModel(config=self.env.config)
+        self.mtc = MarlTransformerModel(config=self.env.config)
 
         self.obs_shape = (self.env.config.grid_size,
                           self.env.config.grid_size,
                           self.env.config.observation_channels * self.n_frames)
+
+        # Define local buffer
+        self.buffer = []
 
         # Initialize environment
         ### The followings are reset in 'reset_states'
@@ -55,7 +52,7 @@ class Worker:
         observations = self.env.reset()
         self.reset_states(observations)
 
-        self.policy(self.padded_states, self.mask, training=True)  # build
+        self.mtc(self.padded_states, self.mask, training=True)  # build
 
     def reset_states(self, observations):
         # TODO prev_actions
@@ -115,56 +112,42 @@ class Worker:
         """
 
         """ 
-        0. Global policyの重みをコピー 
+        0. Global MTC  の重みをコピー 
         """
-        self.policy.set_weights(weights=weights)
+        self.mtc.set_weights(weights=weights[0])
 
         """ 
         1. Rolloutして、batch_size分のデータを収集
             batch_size = sequence_length = b
             max_num_red_agents = n
-            trajectory["s"]: (b,n,g,g,ch*n_frames)
-            trajectory["a"]: (b,n), np.int32
-            trajectory["r"]: (b,n)
-            trajectory["dones"]: (b,n), bool
-            trajectory["s2"]: next_states, (b,n,g,g,ch*n_frames)
-            trajectory["mask"]: (b,n), bool
-            trajectory["mask2"]: next_mask, (b,n), bool
+            transitions = [transition, ...], list
+            transition = (
+                self.padded_states,  # append (1,n,g,g,ch*n_frames)
+                padded_actions,  # append (1,n)
+                padded_rewards,  # append (1,n)
+                next_padded_states,  # append (1,n,g,g,ch*n_frames)
+                padded_dones,  # append (1,n), bool
+                global_r,  # append (1,1)
+                global_done,  # append (1,1), bool
+                self.mask,  # append (1,n), bool
+                next_mask,  # append (1,n), bool
+            )
         """
 
         trajectory = self._rollout()
-
-        """
-        2. Compute advantage & expected_return
-            trajectory['vpred']: values, (b,n)
-            trajectory['vpred2']: next_values, (b,n)
-            trajectory['advantage']: (b,n)
-            trajectory["R"]: expected_return, (b,n)
-        """
-
-        trajectory = self._compute_advantage(trajectory)
 
         return trajectory
 
     def _rollout(self):
         """
         Rolloutにより、t_start<=t<t_max 間(batch_size間)の
-        {s,a,s',r,done,mask,mask',R(n-step return)}を取得
+        {s,a,s',r,done,mask}を取得
         """
-        # 1. 初期化
-        trajectory = {}
-        trajectory["s"] = []
-        trajectory["a"] = []
-        trajectory["r"] = []
-        trajectory["s2"] = []
-        trajectory["dones"] = []
-        trajectory["mask"] = []
-        trajectory["mask2"] = []  # next_mask
 
-        # 2. Rollout実施
+        # Rollout実施
         for i in range(self.batch_size):
             # acts: action=-1 for the dead or dummy agents.
-            acts, _ = self.policy.sample_actions(
+            acts, _ = self.mtc.sample_actions(
                 self.padded_states, self.mask, training=False)  # (1,n), int32
 
             # get alive_agents & all agents actions.
@@ -181,7 +164,7 @@ class Worker:
                 padded_actions[0, idx] = actions[agent_id]
 
             # One step of Lanchester simulation, for alive agents in env
-            next_obserations, rewards, dones, infos = self.env.step(actions)
+            next_obserations, rewards, dones, infos, reward, done = self.env.step(actions)
 
             # Make next_agents_states, next_agents_adjs, and next_alive_agents_ids,
             # including dummy ones
@@ -258,13 +241,24 @@ class Worker:
             # alive_agents_ids = np.array(self.alive_agents_ids, dtype=object)  # (a,), object
             # alive_agents_ids = np.expand_dims(alive_agents_ids, axis=0)  # (1,a)
 
-            trajectory["s"].append(self.padded_states)  # append (1,n,g,g,ch*n_frames)
-            trajectory["a"].append(padded_actions)  # append (1,n)
-            trajectory["r"].append(padded_rewards)  # append (1,n)
-            trajectory["s2"].append(next_padded_states)  # append (1,n,g,g,ch*n_frames)
-            trajectory["dones"].append(padded_dones)  # append (1,n)
-            trajectory["mask"].append(self.mask)  # append (1,n)
-            trajectory["mask2"].append(next_mask)  # append (1,n)
+            global_r = np.expand_dims(
+                np.array([reward], dtype=np.float32), axis=-1)  # append (1,1)
+            global_done = np.expand_dims(
+                np.array([done], dtype=bool), axis=-1)  # append (1,1)
+
+            transition = (
+                self.padded_states,  # append (1,n,g,g,ch*n_frames)
+                padded_actions,  # append (1,n)
+                padded_rewards,  # append (1,n)
+                next_padded_states,  # append (1,n,g,g,ch*n_frames)
+                padded_dones,  # append (1,n), bool
+                global_r,  # append (1,1)
+                global_done, # append (1,1), bool
+                self.mask,  # append (1,n), bool
+                next_mask,  # append (1,n), bool
+            )
+
+            self.buffer.append(transition)
 
             if dones['all_dones']:
                 # print(f'episode reward = {self.episode_return}')
@@ -277,52 +271,7 @@ class Worker:
 
                 self.step += 1
 
-        trajectory["s"] = np.concatenate(trajectory["s"], axis=0).astype(np.float32)
-        # (b,n,g,g,ch*n_frames)
-        trajectory["a"] = np.concatenate(trajectory["a"], axis=0).astype(np.int32)
-        # (b,n), np.int32
-        trajectory["r"] = np.concatenate(trajectory["r"], axis=0).astype(np.float32)
-        # (b,n)
-        trajectory["s2"] = np.concatenate(trajectory["s2"], axis=0).astype(np.float32)
-        # (b,n,g,g,ch*n_frames)
-        trajectory["dones"] = np.concatenate(trajectory["dones"], axis=0).astype(bool)
-        # (b,n), bool
-        trajectory["mask"] = np.concatenate(trajectory["mask"], axis=0).astype(bool)
-        # (b,n), bool
-        trajectory["mask2"] = np.concatenate(trajectory["mask2"], axis=0).astype(bool)
-        # (b,n), bool
+        transitions = self.buffer
+        self.buffer = []
 
-        return trajectory
-
-    def _compute_advantage(self, trajectory):
-
-        [_, values], _ = \
-            self.policy(trajectory["s"], trajectory["mask"], training=False)  # values:(b,n,1)
-        trajectory["vpred"] = values[:, :, 0].numpy()  # (b,n)
-
-        [_, values2], _ = \
-            self.policy(trajectory["s2"], trajectory["mask2"], training=False)  # values:(b,n,1)
-        trajectory["vpred2"] = values2[:, :, 0].numpy()  # (b,n)
-
-        is_nonterminal = 1 - trajectory["dones"].astype(np.float32)  # (b,n)
-
-        # deltas = r + gamma*(1-dones)V(s') - V(s)
-        deltas = trajectory["r"] + \
-                 self.gamma * is_nonterminal * trajectory['vpred2'] - trajectory['vpred']  # (b,n)
-
-        # compute advantages(GAE) & expected_returns
-        advantages = np.zeros_like(deltas, dtype=np.float32)  # (b,n)
-
-        last_gae = 0
-        for idx in reversed(range(self.batch_size)):
-            last_gae = deltas[idx] + self.gamma * self.gae_lambda * is_nonterminal[idx] * last_gae
-            # (n,)
-            advantages[idx] = last_gae  # (n,)
-
-        # GAE
-        trajectory["advantage"] = advantages  # (b,n)
-
-        # Expected_return
-        trajectory["R"] = trajectory["advantage"] + trajectory["vpred"]  # (b,n)
-
-        return trajectory
+        return transitions, self.pid

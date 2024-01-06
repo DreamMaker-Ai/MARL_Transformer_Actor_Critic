@@ -30,7 +30,7 @@ def get_rewards_before_engagement(reds_in_cell, blues_in_cell,
 
 def get_consolidation_of_force_rewards(env, rewards):
     """
-    Called from step() in battlefield_strategy.py (not used)
+    Called from step() in battlefield_strategy_team_reward.py (not used)
     """
     beta = 0.2
     coef = 0.04
@@ -67,7 +67,7 @@ def get_consolidation_of_force_rewards(env, rewards):
 
 def get_economy_of_force_rewards(env, rewards):
     """
-    Called from step() in battlefield_strategy.py (not used)
+    Called from step() in battlefield_strategy_team_reward.py (not used)
     """
     beta = 0.1
     coef = 0.04

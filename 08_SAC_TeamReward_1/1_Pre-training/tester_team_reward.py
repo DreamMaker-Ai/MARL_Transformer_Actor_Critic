@@ -9,7 +9,7 @@ import tensorflow as tf
 import numpy as np
 from collections import deque
 
-from battlefield_strategy import BattleFieldStrategy
+from battlefield_strategy_team_reward import BattleFieldStrategy
 
 from models import MarlTransformerModel
 from utils_gnn import get_alive_agents_ids
@@ -121,6 +121,7 @@ def summarize_results(results):
 
     result['episode_rewards'] = np.mean(results['episode_rewards'])
     result['episode_lens'] = np.mean(results['episode_lens'])
+    result['episode_team_return'] = np.mean(results['episode_team_return'])
 
     result['num_alive_reds_ratio'] = np.mean(results['alive_reds_ratio'])
     result['num_alive_red_platoon'] = np.mean(results['alive_red_platoon'])
@@ -191,6 +192,7 @@ class Tester:
 
         # For saving best model
         self.num_max_win = -1
+        self.max_return = -1000000
 
     def reset_states(self, observations):
         # TODO prev_actions
@@ -251,6 +253,8 @@ class Tester:
         results['episode_rewards'] = []
         results['episode_lens'] = []
 
+        results['episode_team_return'] = []
+
         results['alive_red_platoon'] = []
         results['alive_red_company'] = []
         results['alive_reds_ratio'] = []
@@ -273,7 +277,7 @@ class Tester:
 
     def test_play(self, current_weights):
         # 重みを更新
-        self.policy.set_weights(weights=current_weights)
+        self.policy.set_weights(weights=current_weights[0])
 
         self.save_test_conds()
         results = self.initialize_results()
@@ -282,6 +286,7 @@ class Tester:
             dones = {}
             dones['all_dones'] = False
             episode_reward = 0
+            episode_team_return = 0
 
             if self.env.config.make_time_plot:
                 self.save_initial_conds()
@@ -301,7 +306,7 @@ class Tester:
                     actions[agent_id] = acts[0, idx]
 
                 # One step of Lanchester simulation, for alive agents in env
-                next_obserations, rewards, dones, infos = self.env.step(actions)
+                next_obserations, rewards, dones, infos, reward, done = self.env.step(actions)
 
                 # Make next_agents_states, next_agents_adjs, and next_alive_agents_ids,
                 # including dummy ones
@@ -362,6 +367,8 @@ class Tester:
                 # Update episode rewards
                 episode_reward += np.sum(agents_rewards)
 
+                episode_team_return += reward
+
                 # Store time history of an engagement
                 if self.env.config.make_time_plot:
                     self.store_time_history()
@@ -394,6 +401,8 @@ class Tester:
                 if dones['all_dones']:
                     results['episode_lens'].append(self.step)
                     results['episode_rewards'].append(episode_reward)
+
+                    results['episode_team_return'].append(episode_team_return)
 
                     # Summarize each agent result
                     result_red = summarize_agent_result(self.env.reds)
@@ -431,11 +440,27 @@ class Tester:
 
         if result['num_red_win'] >= self.num_max_win:
             save_dir = Path(__file__).parent / 'models'
-            save_name = '/best_model/'
 
+            save_name = '/best_win_model/'
             self.policy.save_weights(str(save_dir) + save_name)
 
+            save_name = '/best_win_alpha'
+            logalpha = current_weights[1].numpy()
+            np.save(str(save_dir) + save_name, logalpha)
+
             self.num_max_win = result['num_red_win']
+
+        if result['episode_rewards'] >= self.max_return:
+            save_dir = Path(__file__).parent / 'models'
+
+            save_name = '/best_return_model/'
+            self.policy.save_weights(str(save_dir) + save_name)
+
+            save_name = '/best_return_alpha'
+            logalpha = current_weights[1].numpy()
+            np.save(str(save_dir) + save_name, logalpha)
+
+            self.max_return = result['episode_rewards']
 
         return result
 
@@ -760,13 +785,17 @@ def main():
     dummy_policy(padded_obs, mask)
 
     # Load model
-    load_dir = Path(__file__).parent / 'trial_gcp/models'
-    # load_name = '/best_model/'
-    load_name = '/global_policy_59000/'
-
+    load_dir = Path(__file__).parent / 'trial_3/models'
+    load_name = '/model_188000/'
+    # load_name = '/best_return_model/'
     dummy_policy.load_weights(str(load_dir) + load_name)
 
-    weights = dummy_policy.get_weights()
+    load_name = '/alpha_188000.npy'
+    # load_name = '/best_return_alpha.npy'
+    logalpha = np.load(str(load_dir) + load_name)
+    logalpha = tf.Variable(logalpha)
+
+    weights = [dummy_policy.get_weights(), logalpha]
 
     # testerをインスタンス化
     tester = Tester.remote()

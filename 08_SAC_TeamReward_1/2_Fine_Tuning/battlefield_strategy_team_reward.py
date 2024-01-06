@@ -1,6 +1,5 @@
 """
-Bug fixed version. add line 205-206
-Change import n actor, learner, and tester
+Copied from 04_MAPPO & renamed
 """
 import gym
 import numpy as np
@@ -11,15 +10,15 @@ import pprint
 import pickle
 
 from agents_in_env import RED, BLUE
-from config import Config
-from generate_agents_in_env import generate_red_team, generate_blue_team
+from config_finetuning import Config
+from generate_agents_in_finetuning_env import generate_red_team, generate_blue_team
 
 from rewards import get_consolidation_of_force_rewards, get_economy_of_force_rewards
 from observations import get_observations
 from engage import engage_and_get_rewards, compute_engage_mask, get_dones
 
 from generate_movies import MakeAnimation
-from utils import compute_current_total_ef_and_force
+from utils import compute_current_total_ef_and_force, count_alive_agents
 
 from generate_movies_atention_map import MakeAnimation_AttentionMap
 
@@ -202,7 +201,7 @@ class BattleFieldStrategy(gym.Env):
                 infos['remaining_effective_ef_blues'] = remaining_effective_ef_blues
                 infos['remaining_effective_force_blues'] = remaining_effective_force_blues
 
-            for red in self.reds:  # Bug fixed!
+            for red in self.reds:
                 dones[red.id] = True
 
         return dones, infos
@@ -224,7 +223,17 @@ class BattleFieldStrategy(gym.Env):
         dones = {}
         infos = {}
 
+        num_engaging_reds = 0
+        num_engaging_blues = 0
+        engaging_force_reds = 0
+        engaging_force_blues = 0
+
+        reward = self.energy_consumption()  # team reward at timestep, small negative value
+
         rewards, dones = self.initialize_step_rewards_and_dones(rewards, dones)
+
+        reds_num_before, reds_force_before, blues_num_before, blues_force_before = \
+            self.get_team_params()
 
         # 1. move to the new cell
         self.move_reds(actions)
@@ -241,6 +250,13 @@ class BattleFieldStrategy(gym.Env):
         (x1, y1) = np.where(engage_mask == 1)
 
         if len(x1) > 0:
+            # Before engagements
+            num_engaging_reds, engaging_force_reds = \
+                self.compute_force_to_engage(x1, y1, self.reds)
+
+            num_engaging_blues, engaging_force_blues = \
+                self.compute_force_to_engage(x1, y1, self.blues)
+
             # agent ef, force update & get rewards, when engage
             rewards, infos = engage_and_get_rewards(self, x1, y1, rewards, infos)
 
@@ -255,13 +271,187 @@ class BattleFieldStrategy(gym.Env):
         check_code_agent_alive(self.reds)
         check_code_agent_alive(self.blues)
 
+        # Get team reward after engagement
+        if len(x1) > 0:
+            reds_num_after, reds_force_after, blues_num_after, blues_force_after = \
+                self.get_team_params()
+
+        else:
+            reds_num_after = reds_num_before
+            reds_force_after = reds_force_before
+            blues_num_after = blues_num_before
+            blues_force_after = blues_force_before
+
+        """ reward @ every timestep """
+        reward += self.average_force_to_engage_reward(
+            blues_force_after, blues_force_before, reds_force_after, reds_force_before,
+            engaging_force_reds, engaging_force_blues, x1, y1, actions
+        )
+
+        reward += self.enemy_attrition_reward(blues_num_after, blues_num_before)
+
+        """ Is team done ? """
+        done = self.get_team_done(dones)
+
+        """ reward @ done (end of episode) """
+        if done:
+            # For amount of force
+            reward += self.end_of_episode_reward(reds_force_after,
+                                                 self.initial_effective_reds_force,
+                                                 blues_force_after,
+                                                 self.initial_effective_blues_force, infos)
+
         # 5. Get (next) observations after engagement
         observations = get_observations(self)
 
-        return observations, rewards, dones, infos
+        return observations, rewards, dones, infos, reward, done
 
     def render(self, mode=None):
         pass
+
+    def get_team_params(self):
+
+        blues_num = 0
+        blues_force = 0
+        reds_num = 0
+        reds_force = 0
+
+        for blue in self.blues:
+            if blue.alive:
+                blues_num += 1
+                blues_force += blue.effective_force
+
+        for red in self.reds:
+            if red.alive:
+                reds_num += 1
+                reds_force += red.effective_force
+
+        return reds_num, reds_force, blues_num, blues_force
+
+    @staticmethod
+    def symlog(x):
+        # scaling function of reward (adopted from Dreamer-V3)
+        y = np.sign(x) * np.log(np.abs(x) + 1)
+        return y
+
+    def energy_consumption(self):
+        x = -0.5
+        return self.symlog(x)
+
+    def average_force_to_engage_reward(self, blues_force_after, blues_force_before,
+                                       reds_force_after, reds_force_before,
+                                       engaging_force_reds, engaging_force_blues, x1, y1, actions):
+
+        # reward when engagement occurs.
+        if (blues_force_after != blues_force_before) and (reds_force_after != reds_force_before):
+            # reward when engagement occurs.
+
+            if reds_force_after >= blues_force_after:
+                if engaging_force_reds >= engaging_force_blues:
+                    r = engaging_force_reds / engaging_force_blues
+                    r = 2.0 / np.pi * np.arctan(r - 1)  # 0<=r<1
+                    reward = 0.7 + 0.8 * r / len(x1)
+                else:
+                    reward = 0.6
+
+            else:
+                if engaging_force_reds >= engaging_force_blues:
+                    r = engaging_force_reds / engaging_force_blues
+                    r = 2.0 / np.pi * np.arctan(r - 1)  # 0<=r<1
+                    reward = 0.4 + 0.1 * r / len(x1)
+                else:
+                    reward = 0.3
+
+        else:
+            # reward when no-engagement and search enemy
+            num_reds_alive, num_reds_cluster = self.count_group()
+            r1 = num_reds_cluster / num_reds_alive  # 0<r1<=1
+
+            num_move_reds = self.count_move_reds(actions)
+            r2 = num_move_reds / num_reds_alive  # 0<=r2<=1
+
+            if (r1 > 1.) or (r2 > 1.):
+                raise ValueError()
+
+            r = (r1 + r2) / 2.0  # 0<r<=1
+
+            reward = 0.2 * r
+
+        return self.symlog(reward)
+
+    def count_move_reds(self, actions):
+        num_move_reds = 0
+        for red in self.reds:
+            if red.alive:
+                if actions[red.id] != 0:
+                    num_move_reds += 1
+
+        return num_move_reds
+
+    def count_group(self):
+        """ reds の alive数とcluster数をカウント"""
+        alive_count = 0
+        x = []
+        y = []
+        for red in self.reds:
+            if red.alive:
+                alive_count += 1
+                x.append(red.pos[0])
+                y.append(red.pos[1])
+
+        x = np.array(x)
+        y = np.array(y)
+
+        group_count = 0
+        for i in range(self.config.grid_size):
+            for j in range(self.config.grid_size):
+                num = np.sum(np.where(x == i, 1, 0) * np.where(y == j, 1, 0))
+                if num > 0:
+                    group_count += 1
+
+        return alive_count, group_count
+
+    def enemy_attrition_reward(self, blues_num_after, blues_num_before):
+        c2 = 2.0
+
+        reward = blues_num_before - blues_num_after
+
+        return self.symlog(c2 * reward)
+
+    def compute_force_to_engage(self, x1, y1, agents):
+        counter = 0
+        engaging_force = 0
+        total_force = 0
+
+        for agent in agents:
+            if agent.alive:
+                x = agent.pos[0]
+                y = agent.pos[1]
+                total_force += agent.effective_force
+
+                if (x in x1) and (y in y1):
+                    counter += 1
+                    engaging_force += agent.effective_force
+
+        return counter, engaging_force
+
+    def end_of_episode_reward(self, reds_force_after, R0, blues_force_after, B0, infos):
+        if infos["win"] == "reds":
+            reward = 10
+
+        else:
+            reward = -10
+
+        return self.symlog(reward)
+
+    @staticmethod
+    def get_team_done(dones):
+        if dones["all_dones"]:
+            done = True
+        else:
+            done = False
+
+        return done
 
 
 def get_results_for_summary(env, agent, summary):

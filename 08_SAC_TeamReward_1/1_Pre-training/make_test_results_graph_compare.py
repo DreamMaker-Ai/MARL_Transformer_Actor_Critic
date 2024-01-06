@@ -10,7 +10,7 @@ def draw_win_ratio_graphs(agent_type, savedir, x,
     for num_red_win_list, num_blue_win_list, num_no_contest_list in \
             zip(num_red_win_lists, num_blue_win_lists, num_no_contest_lists):
         if idx == 0:
-            pre_label = 'ppo: '
+            pre_label = 'sac_disc: '
             linestyle = 'solid'
         elif idx == 1:
             pre_label = 'a3c: '
@@ -18,7 +18,6 @@ def draw_win_ratio_graphs(agent_type, savedir, x,
         elif idx == 2:
             pre_label = 'dqn: '
             linestyle = 'dotted'
-
         idx += 1
 
         plt.plot(x, num_red_win_list, color='r', marker='o', label=pre_label + 'red win',
@@ -47,7 +46,7 @@ def draw_alive_ratio_graphs(agent_type, savedir, x,
     for num_alive_reds_ratio_list, num_alive_blues_ratio_list in \
             zip(num_alive_reds_ratio_lists, num_alive_blues_ratio_lists):
         if idx == 0:
-            pre_label = 'ppo: '
+            pre_label = 'sac_disc: '
             linestyle = 'solid'
         elif idx == 1:
             pre_label = 'a3c: '
@@ -55,7 +54,6 @@ def draw_alive_ratio_graphs(agent_type, savedir, x,
         elif idx == 2:
             pre_label = 'dqn: '
             linestyle = 'dotted'
-
         idx += 1
 
         plt.plot(x, num_alive_reds_ratio_list, color='r', marker='o',
@@ -85,7 +83,7 @@ def draw_remaining_force_graph(agent_type, savedir, x,
             zip(remaining_red_effective_force_ratio_lists,
                 remaining_blue_effective_force_ratio_lists):
         if idx == 0:
-            pre_label = 'ppo: '
+            pre_label = 'sac_disc: '
             linestyle = 'solid'
         elif idx == 1:
             pre_label = 'a3c: '
@@ -93,7 +91,6 @@ def draw_remaining_force_graph(agent_type, savedir, x,
         elif idx == 2:
             pre_label = 'dqn: '
             linestyle = 'dotted'
-
         idx += 1
 
         plt.plot(x, remaining_red_effective_force_ratio_list,
@@ -120,7 +117,7 @@ def draw_return_len_graph(agent_type, savedir, x, episode_rewards_lists, episode
     for episode_rewards_list, episode_lens_list in \
             zip(episode_rewards_lists, episode_lens_lists):
         if idx == 0:
-            pre_label = 'ppo: '
+            pre_label = 'sac_disc: '
             linestyle = 'solid'
         elif idx == 1:
             pre_label = 'a3c: '
@@ -128,7 +125,6 @@ def draw_return_len_graph(agent_type, savedir, x, episode_rewards_lists, episode
         elif idx == 2:
             pre_label = 'dqn: '
             linestyle = 'dotted'
-
         idx += 1
 
         plt.plot(x, episode_rewards_list, color='r', marker='o', label=pre_label + 'return',
@@ -219,8 +215,10 @@ def main():
     episode_rewards_lists = []
     episode_lens_lists = []
 
-    """ PPO """
-    parent_dir = './trial_gcp/robustness/'
+    """ SAC_Disc """
+    #parent_dir = 'trial_3/Robustness_188K/'
+    parent_dir = 'trial_3/Robustness_of_Strategy_188K/'
+
     savedir = Path(__file__).parent / parent_dir
     if not os.path.exists(savedir):
         os.mkdir(savedir)
@@ -237,7 +235,7 @@ def main():
     episode_lens_lists.append(results[8])
 
     """ A3C """
-    parent_dir = './a3c_results/'
+    parent_dir = '../a3c_results/'
 
     results = make_test_results_graph_of_increase_number(agent_type, parent_dir, file_dir)
     num_red_win_lists.append(results[0])
@@ -251,7 +249,7 @@ def main():
     episode_lens_lists.append(results[8])
 
     """ DQN """
-    parent_dir = './dqn_results/'
+    parent_dir = '../dqn_results/'
 
     results = make_test_results_graph_of_increase_number(agent_type, parent_dir, file_dir)
     num_red_win_lists.append(results[0])
