@@ -5,11 +5,11 @@ import gym
 class Config:
     def __init__(self):
 
-        self.model_dir = 'models/model_355000/'  # newest file -> 'ls -ltr'
-        # self.model_dir = None
+        # self.model_dir = 'models/model_355000/'  # newest file -> 'ls -ltr'
+        self.model_dir = None
 
-        self.alpha_dir = 'models/alpha_355000.npy'  # logalpha
-        # self.alpha_dir = None
+        # self.alpha_dir = 'models/alpha_355000.npy'  # logalpha
+        self.alpha_dir = None
 
         if self.model_dir:  # starting steps for continual training
             self.n0 = 355000  # learner update cycles. Should be read from tensorboard

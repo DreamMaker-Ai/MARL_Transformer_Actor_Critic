@@ -14,7 +14,7 @@ from pathlib import Path
 from config import Config
 from worker_team_reward import Worker
 from replay_team_reward import Replay
-from learner_team_reward import Learner
+from learner_team_reward_2 import Learner
 from tester_team_reward import Tester
 
 
