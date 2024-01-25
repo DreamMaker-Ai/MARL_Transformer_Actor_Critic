@@ -8,23 +8,23 @@ import numpy as np
 
 
 def main():
-    mode = 'learning'
-    # mode = 'pre-training'
+    # mode = 'learning'
+    mode = 'pre-training'
     # mode = 'fine-tuning'
 
     filelist = [
-        "06_SAC_Discrete/01_Baseline/trial_1/history",
-        "06_SAC_Discrete/01_Baseline/trial_3/history",
+        "08_SAC_TeamReward_1/1_Pre-training/trial_1/history",
+        "10_SAC_GlobalState_1/1_Pre_training/trial/history",
     ]
 
     filetypes = [
-        # '/run-.-tag-mean_episode_team_reward.csv',
-        '/run-.-tag-mean_episode_reward of tests.csv',
-        '/run-.-tag-mean_episode_len of tests.csv'
+        '/run-.-tag-mean_episode_team_return.csv',
+        '/run-.-tag-mean_episode_return.csv',
+        '/run-.-tag-mean_episode_len.csv'
     ]
 
-    legend_list_1 = ['b_16/ ', 'b_128/ ']
-    legend_list_2 = ['episode return', 'episode len']
+    legend_list_1 = ['w/o global_state ', 'w/ global_state ']
+    legend_list_2 = ['team return', 'return', 'episode len']
 
     colorlist = ['b', 'r', 'g']
     linelist = ['solid', 'dotted', 'dashed']
@@ -81,7 +81,7 @@ def main():
 
     savename = filetype.replace('/run-.-tag-', '')
     savename = savename.replace('.csv', '')
-    plt.savefig(str(savedir) + '/rewards' + '.png', dpi=500)
+    plt.savefig(str(savedir) + '/returns' + '.png', dpi=500)
 
     plt.show()
 

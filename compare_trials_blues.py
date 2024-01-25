@@ -8,13 +8,13 @@ import numpy as np
 
 
 def main():
-    mode = 'learning'
-    # mode = 'pre-training'
+    # mode = 'learning'
+    mode = 'pre-training'
     # mode = 'fine-tuning'
 
     filelist = [
-        "06_SAC_Discrete/01_Baseline/trial_1/history",
-        "06_SAC_Discrete/01_Baseline/trial_3/history",
+        "08_SAC_TeamReward_1/1_Pre-training/trial_1/history",
+        "10_SAC_GlobalState_1/1_Pre_training/trial/history",
     ]
 
     filetypes = [
@@ -22,7 +22,7 @@ def main():
         '/run-.-tag-mean_remaining_blue_effective_force_ratio.csv',
     ]
 
-    legend_list_1 = ['b_16/ ', 'b_128/ ']
+    legend_list_1 = ['w/o global_state ', 'w/ global_state ']
     legend_list_2 = ['survive blue agents', 'remaining blue forces']
 
     colorlist = ['b', 'r', 'g', 'm']

@@ -12,10 +12,10 @@ import tensorflow as tf
 from pathlib import Path
 
 from config import Config
-from worker_team_reward import Worker
-from replay_team_reward import Replay
-from learner_team_reward import Learner
-from tester_team_reward import Tester
+from worker_team_reward_global_state import Worker
+from replay_team_reward_global_state import Replay
+from learner_team_reward_global_state import Learner
+from tester_team_reward_global_state import Tester
 
 
 def write_config(config, num_workers):

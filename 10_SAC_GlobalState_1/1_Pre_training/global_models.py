@@ -11,19 +11,23 @@ class GlobalCNNModel(tf.keras.models.Model):
     _________________________________________________________________
      Layer (type)                Output Shape              Param #
     =================================================================
-     conv2d (Conv2D)             multiple                  576
+     input_1 (InputLayer)        [(None, 15, 15, 6)]       0
 
-     conv2d_1 (Conv2D)           multiple                  36928
+     conv2d (Conv2D)             (None, 15, 15, 64)        448
 
-     conv2d_2 (Conv2D)           multiple                  36928
+     conv2d_1 (Conv2D)           (None, 7, 7, 64)          36928
 
-     conv2d_3 (Conv2D)           multiple                  36928
+     conv2d_2 (Conv2D)           (None, 5, 5, 64)          36928
 
-     flatten (Flatten)           multiple                  0
+     conv2d_3 (Conv2D)           (None, 3, 3, 64)          36928
+
+     flatten (Flatten)           (None, 576)               0
+
+     dense (Dense)               (None, 256)               147712
 
     =================================================================
-    Total params: 111,360
-    Trainable params: 111,360
+    Total params: 258,944
+    Trainable params: 258,944
     Non-trainable params: 0
     _________________________________________________________________
     """
@@ -76,7 +80,7 @@ class GlobalCNNModel(tf.keras.models.Model):
             activation=None
         )
 
-    # @tf.function
+    @tf.function
     def call(self, inputs):
         # inputs: (b,g,g,global_ch*global_n_frames)=(b,15,15,6)
 
@@ -124,7 +128,8 @@ def main():
     feature = cnn(states)  # (b, hidden_dim)
     print(feature.shape)
 
-    cnn.build_graph(states).summary()
+    """
+    cnn.build_graph().summary()
 
     tf.keras.utils.plot_model(
         cnn.build_graph(),
@@ -134,6 +139,7 @@ def main():
         show_dtype=True,
         dpi=96 * 3
     )
+    """
 
 
 if __name__ == "__main__":

@@ -1,0 +1,29 @@
+{
+     "max_episodes_test_play": 50,
+     "max_steps": 100,
+     "num red-platoons range": [
+          8,
+          8
+     ],
+     "num red-companies range": [
+          8,
+          8
+     ],
+     "num blue-platoons range": [
+          8,
+          8
+     ],
+     "num blue-companies range": [
+          8,
+          8
+     ],
+     "efficiency red range": [
+          0.35,
+          0.45
+     ],
+     "efficiency blue range": [
+          0.35,
+          0.45
+     ],
+     "max num red agents": 16
+}

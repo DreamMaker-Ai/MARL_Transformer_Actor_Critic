@@ -13,7 +13,7 @@ def main():
         'run-.-tag-mean_remaining_blue_effective_force_ratio.csv',
     ]
     parent_dir = \
-        '03_PPO/trial_gcp/'
+        '10_SAC_GlobalState_1/1_Pre_training/trial/'
     filelist = 'history/'
 
     colorlist = ['r', 'b', 'r', 'b']
@@ -49,8 +49,8 @@ def main():
     plt.grid(which="both")
     # plt.ylim([-0.1, 0.95])
     plt.minorticks_on()
-    # plt.legend()
-    plt.legend(loc='upper center', bbox_to_anchor=(.5, -.05), ncol=4)
+    plt.legend()
+    # plt.legend(loc='upper center', bbox_to_anchor=(.5, -.05), ncol=4)
 
     savedir = Path(__file__).parent / (parent_dir + 'history_plots')
     if not os.path.exists(savedir):

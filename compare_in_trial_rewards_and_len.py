@@ -7,11 +7,12 @@ from pathlib import Path
 
 def main():
     filetype = [
-        'run-.-tag-mean_episode_return of tests.csv',
-        'run-.-tag-mean_episode_len of tests.csv'
+        'run-.-tag-mean_episode_team_return.csv',
+        'run-.-tag-mean_episode_return.csv',
+        'run-.-tag-mean_episode_len.csv'
     ]
     parent_dir = \
-        '03_PPO/trial_gcp/'
+        '10_SAC_GlobalState_1/1_Pre_training/trial/'
     filelist = 'history/'
 
     colorlist = ['r', 'm', 'g', 'b', 'y']
@@ -33,7 +34,7 @@ def main():
         average_prop = prop.rolling(window=window).mean()
 
         plt.xlabel('learning steps [K]')
-        plt.ylabel('average return or episode length')
+        plt.ylabel('average returns or episode length')
 
         label = f.replace('run-.-tag-mean_', '')
         label = label.replace('.csv', '')
