@@ -18,15 +18,15 @@ class Config:
             self.n0 = 0
 
         # Define simulation cond.
-        self.show_each_episode_result = False  # mainly for debug
+        self.show_each_episode_result = True  # mainly for debug
         self.draw_win_distributions = False  # mainly for debug
-        self.max_episodes_test_play = 50  # default=50 for training
+        self.max_episodes_test_play = 1  # default=50 for training
 
         # Animation setting
-        self.make_animation = False  # Use self.max_episodes_test_play=1
+        self.make_animation = True  # Use self.max_episodes_test_play=1
 
         # Time plot of a test setting
-        self.make_time_plot = False  # Use self.max_episodes_test_play=1
+        self.make_time_plot = True  # Use self.max_episodes_test_play=1
 
         # Define environment parameters
         self.grid_size = 15  # default=15

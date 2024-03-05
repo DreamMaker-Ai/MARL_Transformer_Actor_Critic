@@ -13,7 +13,7 @@ def main():
         'run-.-tag-mean_remaining_blue_effective_force_ratio.csv',
     ]
     parent_dir = \
-        '10_SAC_GlobalState_1/1_Pre_training/trial/'
+        "11_MTD_SAC/2_Finetuning/trial/"
     filelist = 'history/'
 
     colorlist = ['r', 'b', 'r', 'b']

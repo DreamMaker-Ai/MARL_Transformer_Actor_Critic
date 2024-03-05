@@ -788,7 +788,7 @@ def main():
 
     ch = config.observation_channels
     n_frames = config.n_frames
-    max_num_agents = 15
+    max_num_agents = config.max_num_red_agents
 
     global_state_shape = (grid_size, grid_size, global_ch * global_n_frames)
     global_state = \
@@ -821,18 +821,17 @@ def main():
 
     dummy_policy([padded_obs, global_state], mask)
 
-    """ Use the followings for the test
     # Load model
-    load_dir = Path(__file__).parent / 'trial_3/models'
-    load_name = '/model_188000/'
+    load_dir = Path(__file__).parent / 'trial/models'
+    load_name = '/model_50000/'
     # load_name = '/best_return_model/'
     dummy_policy.load_weights(str(load_dir) + load_name)
 
-    load_name = '/alpha_188000.npy'
+    load_name = '/alpha_50000.npy'
     # load_name = '/best_return_alpha.npy'
     logalpha = np.load(str(load_dir) + load_name)
     logalpha = tf.Variable(logalpha)
-    """
+
     logalpha=tf.Variable(1.0)  # Remove this for the test
 
     weights = [dummy_policy.get_weights(), logalpha]

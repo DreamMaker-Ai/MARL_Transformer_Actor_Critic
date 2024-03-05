@@ -9,12 +9,12 @@ import numpy as np
 
 def main():
     # mode = 'learning'
-    mode = 'pre-training'
-    # mode = 'fine-tuning'
+    # mode = 'pre-training'
+    mode = 'fine-tuning'
 
     filelist = [
-        "08_SAC_TeamReward_1/1_Pre-training/trial_1/history",
-        "10_SAC_GlobalState_1/1_Pre_training/trial/history",
+        "10_SAC_GlobalState_1/2_Finetuning/trial/history",
+        "11_MTD_SAC/2_Finetuning/trial/history",
     ]
 
     filetypes = [
@@ -23,7 +23,7 @@ def main():
         '/run-.-tag-num_no_contest.csv'
     ]
 
-    legend_list_1 = ['w/o global_state ', 'w/ global_state ']
+    legend_list_1 = ['MTC ', 'MTD ']
     legend_list_2 = ['red win', 'blue win', 'no-contest']
 
     colorlist = ['r', 'b', 'g']
@@ -64,7 +64,7 @@ def main():
             averaged_values = np.array(averaged_values)
             averaged_wall_time = np.array(averaged_wall_time)
 
-            plt.plot((averaged_wall_time-averaged_wall_time[0]) / 3600, averaged_values,
+            plt.plot((averaged_wall_time - averaged_wall_time[0]) / 3600, averaged_values / 50,
                      linestyle=line, color=c, alpha=0.7, linewidth=1, label=l1 + l2)
 
     # plt.yscale('log')
