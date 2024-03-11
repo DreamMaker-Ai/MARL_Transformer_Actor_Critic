@@ -209,3 +209,21 @@ history_plots/
 12_MTD_SAC_DecPOMDP/1_Pre_training/test_engagement/
 
 12_MTD_SAC_DecPOMDP/1_Pre_training/trial/
+
+12_MTD_SAC_DecPOMDP/__pycache__/
+
+12_MTD_SAC_DecPOMDP/models_architecture/
+
+12_MTD_SAC_DecPOMDP/trial/
+
+13_MTC_SAC_DecPOMDP/__pycache__/
+
+13_MTC_SAC_DecPOMDP/log/
+
+13_MTC_SAC_DecPOMDP/models/
+
+13_MTC_SAC_DecPOMDP/models_architecture/
+
+13_MTC_SAC_DecPOMDP/test_engagement/
+
+13_MTC_SAC_DecPOMDP/trial/
