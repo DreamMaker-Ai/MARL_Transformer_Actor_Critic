@@ -5,14 +5,14 @@ import gym
 class Config:
     def __init__(self):
 
-        self.model_dir = 'models/model_540000/'  # newest file -> 'ls -ltr'
+        self.model_dir = 'models/model_680000/'  # newest file -> 'ls -ltr'
         # self.model_dir = None
 
-        self.alpha_dir = 'models/alpha_540000.npy'  # logalpha
+        self.alpha_dir = 'models/alpha_680000.npy'  # logalpha
         # self.alpha_dir = None
 
         if self.model_dir:  # starting steps for continual training
-            self.n0 = 540000  # learner update cycles. Should be read from tensorboard
+            self.n0 = 680000  # learner update cycles. Should be read from tensorboard
         else:
             self.n0 = 0
 
@@ -34,6 +34,10 @@ class Config:
         # Define environment parameters
         self.grid_size = 15  # default=15
         self.offset = 0  # blue-team offset from edges
+
+        # When agents are tested in larger battlefield, the global_model need to be build with
+        # the grid_size at the training
+        self.global_grid_size = 15
 
         # Define gym spaces
         self.action_dim = 5

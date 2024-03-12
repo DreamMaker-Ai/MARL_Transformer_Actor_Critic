@@ -11,7 +11,7 @@ from config_dec_pomdp import Config
 from generate_agents_in_env import generate_red_team, generate_blue_team
 
 from rewards import get_consolidation_of_force_rewards, get_economy_of_force_rewards
-from observations_global_state_dec_pomdp import get_observations, get_global_observation
+from observations_global_state_dec_pomdp_robust import get_observations, get_global_observation
 from engage import engage_and_get_rewards, compute_engage_mask, get_dones
 
 from generate_movies_dec_pomdp import MakeAnimation

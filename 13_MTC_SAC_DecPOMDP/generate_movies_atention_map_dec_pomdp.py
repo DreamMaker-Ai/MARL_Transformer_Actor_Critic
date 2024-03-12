@@ -38,7 +38,7 @@ class MakeAnimation_AttentionMap:
 
         self.rgb_channel_forces = []  # observation map of effective forces
         self.rgb_channel_efficiencies = []  # observation map of efficiencies
-        self.rgb_channel_engage_forces = [] # observation map of engage forces
+        self.rgb_channel_engage_forces = []  # observation map of engage forces
 
         self.attention_maps = [[], []]
         self.num_heads = self.env.config.num_heads  # 2
@@ -69,7 +69,7 @@ class MakeAnimation_AttentionMap:
 
         att_scores = atts[relation_kernel]  # (1,num_heads,n,n), n=max_num_red_agents
 
-        att_score = att_scores[i][0, :, :]  # Attention matrix of agent_i, (2,n)
+        att_score = att_scores[0, :, i, :]  # Attention matrix of agent_i, (2,n)
 
         attention_map = np.zeros([g_size, g_size, 3])  # RGB-array
 
@@ -77,10 +77,14 @@ class MakeAnimation_AttentionMap:
             att_vals = att_score[head, :]  # (n,)
 
             for a in alive_agents_ids:
-                att_val = att_vals[a]
-                att_pos = self.env.reds[a].pos
+                dist_x = np.abs(self.env.reds[i].pos[0] - self.env.reds[a].pos[0])
+                dist_y = np.abs(self.env.reds[i].pos[1] - self.env.reds[a].pos[1])
 
-                attention_map[att_pos[0], att_pos[1], head % 3] += att_val
+                if dist_x <= self.env.config.com and dist_y <= self.env.config.com:
+                    att_val = att_vals[a]
+                    att_pos = self.env.reds[a].pos
+
+                    attention_map[att_pos[0], att_pos[1], head % 3] += att_val
 
         self.attention_maps[relation_kernel].append(attention_map)
 
@@ -225,4 +229,3 @@ class MakeAnimation_AttentionMap:
 
         self.total_force_reds.append(total_effective_force_reds)
         self.total_force_blues.append(total_effective_force_blues)
-

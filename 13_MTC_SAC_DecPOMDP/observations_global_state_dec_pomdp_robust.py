@@ -1,4 +1,5 @@
 import numpy as np
+import math
 
 from utils import add_channel_dim
 from utils import compute_blue_observation_maps, compute_engage_observation_maps, \
@@ -8,7 +9,8 @@ from utils import compute_blue_observation_maps_2, compute_ally_observation_maps
     compute_my_observation_maps_2
 
 from utils import compute_blue_observation_maps_3, compute_engage_observation_maps_3, \
-    compute_ally_observation_maps_3, compute_my_observation_maps_3, compute_red_observation_maps_3
+    compute_ally_observation_maps_3, compute_my_observation_maps_3, compute_red_observation_maps_3, \
+    compute_global_blue_maps, compute_global_red_maps
 
 """
     Copied from QMIX-2 (QMIX Another Implementation)
@@ -27,9 +29,9 @@ global_observation = np.concatenate([
 
 
 def get_global_observation(env):
-    red_normalized_force, red_efficiency = compute_red_observation_maps_3(env)  # (g,g)
-    blue_normalized_force, blue_efficiency = compute_blue_observation_maps_3(env)  # (g,g)
-    sin_normalized, cos_normalized = compute_red_pos_maps(env)  # (g,g)
+    red_normalized_force, red_efficiency = compute_global_red_maps(env)  # (g,g)
+    blue_normalized_force, blue_efficiency = compute_global_blue_maps(env)  # (g,g)
+    sin_normalized, cos_normalized = compute_global_red_pos_maps(env)  # (g,g)
 
     red_normalized_force = add_channel_dim(red_normalized_force)  # (g,g,1)
     red_efficiency = add_channel_dim(red_efficiency)  # (g,g,1)
@@ -47,6 +49,33 @@ def get_global_observation(env):
     ], axis=-1)  # (g,g,6)
 
     return observation  # (g,g,6)
+
+
+def compute_global_red_pos_maps(env):
+    """
+    map of agent position in agent set
+    """
+    sin_map = np.zeros((env.config.global_grid_size, env.config.global_grid_size), dtype=np.float32)
+    cos_map = np.zeros((env.config.global_grid_size, env.config.global_grid_size), dtype=np.float32)
+
+    i = 0
+
+    ratio = env.config.global_grid_size / env.config.grid_size
+
+    for red in env.reds:
+        if red.alive:
+            x = math.floor(red.pos[0] * ratio)
+            y = math.floor(red.pos[1] * ratio)
+
+            sin_map[x, y] += (np.sin(i / 10.) + 1.) / 2.
+            cos_map[x, y] += (np.cos(i / 10.) + 1.) / 2.
+
+            i += 1
+
+    normalized_sin_map = 2.0 / np.pi * np.arctan(sin_map)
+    normalized_cos_map = 2.0 / np.pi * np.arctan(cos_map)
+
+    return normalized_sin_map, normalized_cos_map
 
 
 def compute_red_pos_maps(env):

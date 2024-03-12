@@ -847,7 +847,8 @@ def main():
     global_ch = config.global_observation_channels  # 6
     global_n_frames = config.global_n_frames
 
-    global_state_shape = (grid_size, grid_size, global_ch * global_n_frames)  # (15,15,6)
+    global_state_shape = \
+        (config.global_grid_size, config.global_grid_size, global_ch * global_n_frames)  # (15,15,6)
 
     global_state = np.ones(shape=global_state_shape)  # (15,15,6)
     global_state = np.expand_dims(global_state, axis=0)  # (1,15,15,6)
