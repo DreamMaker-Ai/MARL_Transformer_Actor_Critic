@@ -8,13 +8,14 @@ import numpy as np
 
 
 def main():
-    # mode = 'learning'
+    mode = 'learning'
     # mode = 'pre-training'
-    mode = 'fine-tuning'
+    # mode = 'fine-tuning'
 
     filelist = [
-        "10_SAC_GlobalState_1/2_Finetuning/trial/history",
-        "11_MTD_SAC/2_Finetuning/trial/history",
+        "13_MTC_SAC_DecPOMDP/trial_0_global_n_frames=1/history",
+        "13_MTC_SAC_DecPOMDP/trial_1_global_n_frames=4/history",
+        "14_MTC_SAC_DecPOMDP_2/trial_0/history",
     ]
 
     filetypes = [
@@ -23,13 +24,14 @@ def main():
         '/run-.-tag-mean_episode_len.csv'
     ]
 
-    legend_list_1 = ['MTC ', 'MTD ']
+    legend_list_1 = ['(team_r, g_stack=1): ', '(team_r, g_stack=4): ', '(ind_r, g_stack=4): ']
     legend_list_2 = ['team return', 'return', 'episode len']
 
     colorlist = ['b', 'r', 'g']
     linelist = ['solid', 'dotted', 'dashed']
 
     window = 10
+    plt.figure(figsize=(16, 12))
 
     for f, c, l1 in zip(filelist, colorlist, legend_list_1):
         for filetype, l2, line in zip(filetypes, legend_list_2, linelist):

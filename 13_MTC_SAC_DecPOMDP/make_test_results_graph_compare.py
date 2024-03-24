@@ -215,9 +215,8 @@ def main():
     episode_rewards_lists = []
     episode_lens_lists = []
 
-    """ SAC_Disc """
-    #parent_dir = 'trial_3/Robustness_188K/'
-    parent_dir = 'trial_3/Robustness_of_Strategy_188K/'
+    """ individual_reward, global_n_frames=4 """
+    parent_dir = '..//14_MTC_SAC_DecPOMDP_2/trial_0/nominal_test/'
 
     savedir = Path(__file__).parent / parent_dir
     if not os.path.exists(savedir):
@@ -234,8 +233,8 @@ def main():
     episode_rewards_lists.append(results[7])
     episode_lens_lists.append(results[8])
 
-    """ A3C """
-    parent_dir = '../a3c_results/'
+    """ team_reward, global_n_frames=1 """
+    parent_dir = '../13_MTC_SAC_DecPOMDP/trial_0_global_n_frames=1/nominal_test/'
 
     results = make_test_results_graph_of_increase_number(agent_type, parent_dir, file_dir)
     num_red_win_lists.append(results[0])
@@ -248,8 +247,8 @@ def main():
     episode_rewards_lists.append(results[7])
     episode_lens_lists.append(results[8])
 
-    """ DQN """
-    parent_dir = '../dqn_results/'
+    """ team_reward, global_n_frames=4 """
+    parent_dir = '../13_MTC_SAC_DecPOMDP/trial_1_global_n_frames=4/nominal_test/'
 
     results = make_test_results_graph_of_increase_number(agent_type, parent_dir, file_dir)
     num_red_win_lists.append(results[0])

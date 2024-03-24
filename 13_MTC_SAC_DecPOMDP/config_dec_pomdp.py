@@ -17,22 +17,22 @@ class Config:
             self.n0 = 0
 
         # Define simulation cond.
-        self.show_each_episode_result = False  # mainly for debug
+        self.show_each_episode_result = True  # mainly for debug
         self.draw_win_distributions = False  # mainly for debug
-        self.max_episodes_test_play = 50  # default=50 for training
+        self.max_episodes_test_play = 1  # default=50 for training
 
         # Animation setting
-        self.make_animation = False  # Use self.max_episodes_test_play=1
+        self.make_animation = True  # Use self.max_episodes_test_play=1
 
         # Time plot of a test setting
-        self.make_time_plot = False  # Use self.max_episodes_test_play=1
+        self.make_time_plot = True  # Use self.max_episodes_test_play=1
 
         # POMDP params
         self.fov = 2  # default=2
         self.com = 2  # default=2
 
         # Define environment parameters
-        self.grid_size = 15  # default=15
+        self.grid_size = 50  # default=15
         self.offset = 0  # blue-team offset from edges
 
         # When agents are tested in larger battlefield, the global_model need to be build with
@@ -56,7 +56,7 @@ class Config:
                            )
 
         self.global_observation_channels = 6
-        self.global_n_frames = 1
+        self.global_n_frames = 4
 
         # Replay buffer
         self.capacity = 10000  # Default=10000
@@ -78,7 +78,7 @@ class Config:
         self.num_minibatchs = 3  # default=3
         self.tau = 0.01  # Soft update of target network
         self.gamma = 0.96
-        self.max_steps = 100  # Default=100. 200 for robustness test
+        self.max_steps = 400  # Default=100. 200/400 for robustness test
 
         self.learning_rate = 5e-5  # Default=5e-5
         self.alpha_learning_rate = 1e-5  # Default=1e-5
@@ -100,11 +100,11 @@ class Config:
         self.agent_forces = (50, 150)
 
         # Define possible red / blue agent parameters
-        self.red_platoons = (3, 10)  # num range of red platoons, default=(3,10)
-        self.red_companies = (2, 5)  # num range of red companies, default=(2,5)
+        self.red_platoons = (150, 150)  # num range of red platoons, default=(3,10)
+        self.red_companies = (150, 150)  # num range of red companies, default=(2,5)
 
-        self.blue_platoons = (3, 10)  # num range of blue platoons, default=(3,10)
-        self.blue_companies = (2, 5)  # num range of blue companies, default=(2,5)
+        self.blue_platoons = (250, 250)  # num range of blue platoons, default=(3,10)
+        self.blue_companies = (250, 250)  # num range of blue companies, default=(2,5)
 
         self.efficiencies_red = (0.3, 0.5)  # range
         self.efficiencies_blue = (0.3, 0.5)

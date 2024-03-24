@@ -15,10 +15,11 @@ def make_test_results_graph_of_increase_number(agent_type):
     remaining_red_effective_force_ratio_list = []
     remaining_blue_effective_force_ratio_list = []
 
+    episode_team_return_list = []
     episode_rewards_list = []
     episode_lens_list = []
 
-    parent_dir = 'trial' + '/robustness/'
+    parent_dir = 'trial_0/robustness_blues/'
 
     if agent_type == 'platoons' or agent_type == 'blue_platoons' or agent_type == 'red_platoons':
         file_dir = ['(3,10)', '(11,20)', '(21,30)', '(31,40)', '(41,50)']
@@ -45,6 +46,7 @@ def make_test_results_graph_of_increase_number(agent_type):
             remaining_blue_effective_force_ratio_list. \
                 append(json_data['remaining_blue_effective_force_ratio'])
 
+            episode_team_return_list.append(json_data['episode_team_return'])
             episode_rewards_list.append(json_data['episode_rewards'])
             episode_lens_list.append(json_data['episode_lens'])
 
@@ -106,11 +108,12 @@ def make_test_results_graph_of_increase_number(agent_type):
     plt.savefig(str(savedir) + '/' + savename + '.png', dpi=300)
     plt.show()
 
-    plt.plot(x, episode_rewards_list, color='r', marker='o', label='average episode reward')
+    plt.plot(x, episode_team_return_list, color='r', marker='o', label='average team return')
+    plt.plot(x, episode_rewards_list, color='g', marker='o', label='average return')
     plt.plot(x, episode_lens_list, color='b', marker='s', label='average episode length')
-    plt.title('average rewards and length of episodes, when increase num of ' + agent_type)
+    plt.title('average returns and length of episodes, when increase num of ' + agent_type)
     plt.xlabel('num (bin range center) of ' + agent_type)
-    plt.ylabel('rewards / length')
+    plt.ylabel('returns / length')
     plt.minorticks_on()
     plt.legend()
     plt.grid()

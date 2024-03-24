@@ -515,7 +515,7 @@ class Tester:
 
                     self.step += 1
 
-            if i_episode % 100 == 0:
+            if i_episode % 10 == 0:
                 print(f'{i_episode} episodes completed!')
 
         result = summarize_results(results)
@@ -775,6 +775,14 @@ class Tester:
 
     def save_test_conds(self):
         test_conds = {
+            'grid_size': self.env.config.grid_size,
+            'observation_channels': self.env.config.observation_channels,
+            'n_frames': self.env.config.n_frames,
+            'fov': self.env.config.fov,
+            'com': self.env.config.com,
+            'global_grid_size': self.env.config.global_grid_size,
+            'global_observation_channels': self.env.config.global_observation_channels,
+            'global_n_frames': self.env.config.global_n_frames,
             'max_episodes_test_play': self.env.config.max_episodes_test_play,
             'max_steps': self.env.config.max_steps,
             'num red-platoons range': self.env.config.red_platoons,
@@ -904,12 +912,12 @@ def main():
 
     #""" Use the followings for the test
     # Load model
-    load_dir = Path(__file__).parent / 'trial_0/models'
-    load_name = '/model_680000/'
+    load_dir = Path(__file__).parent / 'trial_1_global_n_frames=4/models'
+    load_name = '/model_400000/'
     # load_name = '/best_return_model/'
     dummy_policy.load_weights(str(load_dir) + load_name)
 
-    load_name = '/alpha_680000.npy'
+    load_name = '/alpha_400000.npy'
     # load_name = '/best_return_alpha.npy'
     logalpha = np.load(str(load_dir) + load_name)
     logalpha = tf.Variable(logalpha)

@@ -15,7 +15,7 @@ from config_dec_pomdp import Config
 from worker_team_reward_global_state import Worker
 from replay_team_reward_global_state_mtc_dec_pomdp import Replay
 from learner_team_reward_global_state_mtc_dec_pomdp import Learner
-from tester_team_reward_global_state_mtc_dec_pomdp import Tester
+from tester_robustness_to_gridsize import Tester
 
 
 def write_config(config, num_workers):
@@ -35,6 +35,10 @@ def write_config(config, num_workers):
 
         'fov': config.fov,
         'com': config.com,
+
+        'global_grid_size': config.global_grid_size,
+        'global_observation_channels': config.global_observation_channels,
+        'global_n_frames': config.global_n_frames,
 
         'capacity': config.capacity,
         'compress': config.compress,

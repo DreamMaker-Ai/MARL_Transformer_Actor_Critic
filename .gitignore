@@ -237,3 +237,25 @@ history_plots/
 13_MTC_SAC_DecPOMDP/blue_platoons=(41,50)/
 
 13_MTC_SAC_DecPOMDP/trial_0/
+
+13_MTC_SAC_DecPOMDP/old/
+
+13_MTC_SAC_DecPOMDP/trial_0_global_n_frames=1/
+
+13_MTC_SAC_DecPOMDP/trial_1_global_n_frames=4/
+
+14_MTC_SAC_DecPOMDP_2/__pycache__/
+
+14_MTC_SAC_DecPOMDP_2/trial_0/
+
+15_MTC_SAC_POMDP_Continual/__pycache__/
+
+15_MTC_SAC_POMDP_Continual/test_engagement/
+
+15_MTC_SAC_POMDP_Continual/trial/
+
+Compare_13_14_history_plots/
+
+15_MTC_SAC_POMDP_Continual/log_saved/
+
+15_MTC_SAC_POMDP_Continual/models_saved/

@@ -13,13 +13,14 @@ def main():
         'run-.-tag-mean_remaining_blue_effective_force_ratio.csv',
     ]
     parent_dir = \
-        "11_MTD_SAC/2_Finetuning/trial/"
+        "14_MTC_SAC_DecPOMDP_2/trial_0/"
     filelist = 'history/'
 
     colorlist = ['r', 'b', 'r', 'b']
     linelist = ['solid', 'solid', 'dotted', 'dotted']
 
     window = 10  # window of moving average
+    plt.figure(figsize=(16, 12))
 
     for f, c, l in zip(filetype, colorlist, linelist):
         ff = parent_dir + filelist + f
