@@ -17,22 +17,22 @@ class Config:
             self.n0 = 0
 
         # Define simulation cond.
-        self.show_each_episode_result = False  # mainly for debug
+        self.show_each_episode_result = True  # mainly for debug
         self.draw_win_distributions = False  # mainly for debug
-        self.max_episodes_test_play = 100  # default=50 for training
+        self.max_episodes_test_play = 1  # default=50 for training
 
         # Animation setting
-        self.make_animation = False  # Use self.max_episodes_test_play=1
+        self.make_animation = True  # Use self.max_episodes_test_play=1
 
         # Time plot of a test setting
-        self.make_time_plot = False  # Use self.max_episodes_test_play=1
+        self.make_time_plot = True  # Use self.max_episodes_test_play=1
 
         # POMDP params
         self.fov = 2  # default=2
         self.com = 8  # default=2
 
         # Define environment parameters
-        self.grid_size = 15  # default=15
+        self.grid_size = 50  # default=15
         self.offset = 0  # blue-team offset from edges
 
         # When agents are tested in larger battlefield, the global_model need to be build with

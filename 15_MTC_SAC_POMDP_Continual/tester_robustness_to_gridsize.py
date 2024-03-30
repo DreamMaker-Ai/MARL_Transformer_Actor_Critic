@@ -912,12 +912,12 @@ def main():
 
     #""" Use the followings for the test
     # Load model
-    load_dir = Path(__file__).parent / 'trial_0/models'
-    load_name = '/model_440000/'
+    load_dir = Path(__file__).parent / 'trial_continual/models'
+    load_name = '/model_600000/'
     # load_name = '/best_return_model/'
     dummy_policy.load_weights(str(load_dir) + load_name)
 
-    load_name = '/alpha_440000.npy'
+    load_name = '/alpha_600000.npy'
     # load_name = '/best_return_alpha.npy'
     logalpha = np.load(str(load_dir) + load_name)
     logalpha = tf.Variable(logalpha)

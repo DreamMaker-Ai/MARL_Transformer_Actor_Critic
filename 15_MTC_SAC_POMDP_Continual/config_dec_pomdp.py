@@ -17,15 +17,15 @@ class Config:
             self.n0 = 0
 
         # Define simulation cond.
-        self.show_each_episode_result = False  # mainly for debug
+        self.show_each_episode_result = True  # mainly for debug
         self.draw_win_distributions = False  # mainly for debug
-        self.max_episodes_test_play = 50  # default=50 for training
+        self.max_episodes_test_play = 1  # default=50 for training
 
         # Animation setting
-        self.make_animation = False  # Use self.max_episodes_test_play=1
+        self.make_animation = True  # Use self.max_episodes_test_play=1
 
         # Time plot of a test setting
-        self.make_time_plot = False  # Use self.max_episodes_test_play=1
+        self.make_time_plot = True  # Use self.max_episodes_test_play=1
 
         # POMDP params
         self.fov = 2  # default=2
@@ -78,7 +78,7 @@ class Config:
         self.num_minibatchs = 3  # default=3
         self.tau = 0.01  # Soft update of target network
         self.gamma = 0.96
-        self.max_steps = 100  # Default=100 for training. 200/400 for robustness test
+        self.max_steps = 200  # Default=100 for training. 200/400 for robustness test
 
         self.learning_rate = 5e-5  # Default=5e-5
         self.alpha_learning_rate = 1e-5  # Default=1e-5
