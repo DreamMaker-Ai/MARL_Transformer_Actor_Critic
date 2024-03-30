@@ -25,7 +25,7 @@ class Learner:
 
         self.target_mtc = MarlTransformerGlobalStateModel(config=self.env.config)
 
-        self.logalpha = tf.Variable(0.5)
+        self.logalpha = tf.Variable(tf.math.log(0.5))
 
         self.optimizer = tf.keras.optimizers.Adam(learning_rate=self.env.config.learning_rate)
 
