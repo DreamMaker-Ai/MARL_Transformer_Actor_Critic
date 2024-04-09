@@ -24,7 +24,7 @@ def main():
         '/run-.-tag-num_no_contest.csv'
     ]
 
-    legend_list_1 = ['(team_r, g_stack=1): ', '(team_r, g_stack=4): ', '(ind_r, g_stack=4): ']
+    legend_list_1 = ['POMDP-1: ', 'POMDP-4: ', 'IR: ']
     legend_list_2 = ['red win', 'blue win', 'no-contest']
 
     colorlist = ['r', 'b', 'g']
@@ -66,15 +66,15 @@ def main():
             averaged_values = np.array(averaged_values)
 
             plt.plot(averaged_step / 1000, averaged_values / 50, linestyle=line, color=c,
-                     alpha=0.7, linewidth=1, label=l1 + l2)
+                     alpha=0.7, linewidth=2, label=l1 + l2)
 
     # plt.yscale('log')
-    plt.title(f'Moving Average of Win Ratios, window={window}')
+    plt.title(f'Moving Average of Win Ratios, window={window}', fontsize="14")
     plt.grid(which="both")
-    plt.xlabel(mode + ' steps [K]')
-    plt.ylabel('win ratio')
+    plt.xlabel(mode + ' steps [K]', fontsize="14")
+    plt.ylabel('win ratio', fontsize="14")
     plt.minorticks_on()
-    plt.legend()
+    plt.legend(fontsize="14")
     # plt.legend(loc='upper center', bbox_to_anchor=(.5, -.1), ncol=3)
 
     savedir = Path(__file__).parent / 'history_plots'

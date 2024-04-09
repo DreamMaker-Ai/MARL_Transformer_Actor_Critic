@@ -24,8 +24,8 @@ def main():
         '/run-.-tag-mean_episode_len.csv'
     ]
 
-    legend_list_1 = ['(team_r, g_stack=1): ', '(team_r, g_stack=4): ', '(ind_r, g_stack=4): ']
-    legend_list_2 = ['team return', 'return', 'episode len']
+    legend_list_1 = ['POMDP-1: ', 'POMDP-4: ', 'IR: ']
+    legend_list_2 = ['team return', 'sum of ind. returns', 'episode len']
 
     colorlist = ['b', 'r', 'g']
     linelist = ['solid', 'dotted', 'dashed']
@@ -66,15 +66,15 @@ def main():
             averaged_values = np.array(averaged_values)
 
             plt.plot(averaged_step / 1000, averaged_values, linestyle=line, color=c,
-                     alpha=0.7, linewidth=1, label=l1 + l2)
+                     alpha=0.7, linewidth=2, label=l1 + l2)
 
     # plt.yscale('log')
-    plt.title(f'Moving Average of returns and episode length, window={window}')
+    plt.title(f'Moving Average of returns and episode length, window={window}', fontsize="14")
     plt.grid(which="both")
-    plt.xlabel(mode + ' steps [K]')
-    plt.ylabel('returns / length')
+    plt.xlabel(mode + ' steps [K]', fontsize="14")
+    plt.ylabel('returns / length', fontsize="14")
     plt.minorticks_on()
-    plt.legend()
+    plt.legend(fontsize="14")
     # plt.legend(loc='upper center', bbox_to_anchor=(.5, -.1), ncol=3)
 
     savedir = Path(__file__).parent / 'history_plots'

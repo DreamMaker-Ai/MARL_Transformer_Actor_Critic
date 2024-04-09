@@ -23,7 +23,7 @@ def main():
         '/run-.-tag-mean_remaining_red_effective_force_ratio.csv',
     ]
 
-    legend_list_1 = ['(team_r, g_stack=1): ', '(team_r, g_stack=4): ', '(ind_r, g_stack=4): ']
+    legend_list_1 = ['POMDP-1: ', 'POMDP-4: ', 'IR: ']
     legend_list_2 = ['survive red agents', 'remaining red forces']
 
     colorlist = ['b', 'r', 'g', 'm']
@@ -66,15 +66,15 @@ def main():
             averaged_wall_time = np.array(averaged_wall_time)
 
             plt.plot((averaged_wall_time-averaged_wall_time[0]) / 3600, averaged_values,
-                     linestyle=line, color=c, alpha=0.7, linewidth=1, label=l1 + l2)
+                     linestyle=line, color=c, alpha=0.7, linewidth=2, label=l1 + l2)
 
     # plt.yscale('log')
-    plt.title(f'Moving Average of remaining reds & forces, window={window}')
+    plt.title(f'Moving Average of remaining reds & forces, window={window}', fontsize="14")
     plt.grid(which="both")
-    plt.xlabel(mode + ' hours')
-    plt.ylabel('remaining ratio')
+    plt.xlabel(mode + ' hours', fontsize="14")
+    plt.ylabel('remaining ratio', fontsize="14")
     plt.minorticks_on()
-    plt.legend()
+    plt.legend(fontsize="14")
 
     savedir = Path(__file__).parent / 'history_plots'
     if not os.path.exists(savedir):
