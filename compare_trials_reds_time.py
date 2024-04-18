@@ -13,9 +13,9 @@ def main():
     # mode = 'fine-tuning'
 
     filelist = [
-        "13_MTC_SAC_DecPOMDP/trial_0_global_n_frames=1/history",
-        "13_MTC_SAC_DecPOMDP/trial_1_global_n_frames=4/history",
-        "14_MTC_SAC_DecPOMDP_2/trial_0/history",
+        "16_MTC_SAC_SelfPlay/test_trial_0/history",
+        "16_MTC_SAC_SelfPlay/test_trial_1/history",
+        "17_MTC_SAC_SelfPlay_NewReward/trial/history",
     ]
 
     filetypes = [

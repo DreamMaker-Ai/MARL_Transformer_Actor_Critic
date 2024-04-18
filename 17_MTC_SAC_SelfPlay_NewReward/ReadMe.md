@@ -2,6 +2,8 @@
 
 ### Add : individual reward for eliminating blue agent.
 
+## This is preliminary check for self_play
+
 ### Modified:
  - rewards.py -> reward_sp2.py
  - engage.py -> engage_sp2.py

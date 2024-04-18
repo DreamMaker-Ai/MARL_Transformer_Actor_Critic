@@ -1,20 +1,28 @@
 import numpy as np
 import gym
+import pickle
 
 
 class Config:
     def __init__(self):
 
-        # self.model_dir = 'reds_model/model_440000/'  # newest file -> 'ls -ltr'
-        self.model_dir = 'models/model_1185000/'  # newest file -> 'ls -ltr'
+        self.continual_learning = True  # False for the first_time learning
+
+        if self.continual_learning:
+            with open('pool_of_networks.pickle', mode='br') as fi:
+                self.pool_of_networks = pickle.load(fi)
+        else:
+            self.pool_of_networks = [0, ]  # initial pool of blue networks
+
+        """ models for training """
+        self.model_dir = 'models/model_915000/'  # newest file -> 'ls -ltr'
         # self.model_dir = None
 
-        # self.alpha_dir = 'reds_model/alpha_440000.npy'  # logalpha
-        self.alpha_dir = 'models/alpha_1185000.npy'  # logalpha
+        self.alpha_dir = 'models/alpha_915000.npy'  # logalpha
         # self.alpha_dir = None
 
         if self.model_dir:  # starting steps for continual training
-            self.n0 = 1185000  # learner update cycles. Should be read from tensorboard
+            self.n0 = 915000  # learner update cycles. Should be read from tensorboard
         else:
             self.n0 = 0
 
@@ -41,6 +49,11 @@ class Config:
         # the grid_size at the training
         self.global_grid_size = 15
 
+        # Commander model
+        self.commander_grid_size = 25
+        self.command_update_cycle = 5
+        self.command_gamma = 0.6
+
         # Define gym spaces
         self.action_dim = 5
         self.action_space = gym.spaces.Discrete(self.action_dim)
@@ -60,6 +73,9 @@ class Config:
         self.global_observation_channels = 6
         self.global_n_frames = 4
 
+        self.commander_observation_channels = 6
+        self.commander_n_frames = 1
+
         # Replay buffer
         self.capacity = 10000  # Default=10000
         self.compress = True
@@ -74,7 +90,7 @@ class Config:
         # Training parameters
         self.worker_rollout_steps = 16  # default=16
         self.num_update_cycles = 100000000
-        self.worker_rollouts_before_train = 50  # Default=50
+        self.worker_rollouts_before_train = 5  # Default=50
         self.batch_size = 16  # default=16
 
         self.num_minibatchs = 3  # default=3

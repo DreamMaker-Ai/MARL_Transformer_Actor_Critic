@@ -1,20 +1,28 @@
 import numpy as np
 import gym
+import pickle
 
 
 class Config:
     def __init__(self):
 
-        # self.model_dir = 'reds_model/model_440000/'  # newest file -> 'ls -ltr'
-        self.model_dir = 'models/model_1185000/'  # newest file -> 'ls -ltr'
+        self.continual_learning = True  # False for the first_time learning
+
+        if self.continual_learning:
+            with open('pool_of_networks.pickle', mode='br') as fi:
+                self.pool_of_networks = pickle.load(fi)
+        else:
+            self.pool_of_networks = [0, 100000]  # initial pool of blue networks
+
+        """ models for training """
+        self.model_dir = 'models/model_1245000/'  # newest file -> 'ls -ltr'
         # self.model_dir = None
 
-        # self.alpha_dir = 'reds_model/alpha_440000.npy'  # logalpha
-        self.alpha_dir = 'models/alpha_1185000.npy'  # logalpha
+        self.alpha_dir = 'models/alpha_1245000.npy'  # logalpha
         # self.alpha_dir = None
 
         if self.model_dir:  # starting steps for continual training
-            self.n0 = 1185000  # learner update cycles. Should be read from tensorboard
+            self.n0 = 1245000  # learner update cycles. Should be read from tensorboard
         else:
             self.n0 = 0
 
@@ -74,7 +82,7 @@ class Config:
         # Training parameters
         self.worker_rollout_steps = 16  # default=16
         self.num_update_cycles = 100000000
-        self.worker_rollouts_before_train = 50  # Default=50
+        self.worker_rollouts_before_train = 5  # Default=50
         self.batch_size = 16  # default=16
 
         self.num_minibatchs = 3  # default=3

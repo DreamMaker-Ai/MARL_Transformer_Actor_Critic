@@ -9,7 +9,7 @@ import tensorflow as tf
 import numpy as np
 from collections import deque
 
-from battlefield_strategy_team_reward_global_state import BattleFieldStrategy
+from battlefield_strategy_selfplay_2 import BattleFieldStrategy
 
 from models_global_state_mtc_dec_pomdp import MarlTransformerGlobalStateModel
 from global_models_dec_pomdp import GlobalCNNModel
@@ -198,8 +198,11 @@ class Tester:
         # self.episode_reward = None
         self.step = None
 
+        # define blue_agents network id  in 'blues_model'
+        self.blue_network_id = [440000, ]
+
         ### Initialize above Nones
-        observations, global_state = self.env.reset()
+        observations, global_state = self.env.reset(pool_of_networks=self.blue_network_id)
         self.reset_states(observations, global_state)
 
         # make_animation
@@ -504,7 +507,8 @@ class Tester:
                         self.env.make_animation_attention_map.generate_movies()
 
                     # Reset env
-                    observations, global_state = self.env.reset()
+
+                    observations, global_state = self.env.reset(self.blue_network_id)
                     self.reset_states(observations, global_state)
                 else:  # dones['all_done'] ではない時
                     self.alive_agents_ids = next_alive_agents_ids
@@ -520,7 +524,6 @@ class Tester:
 
         result = summarize_results(results)
 
-        """
         if result['num_red_win'] >= self.num_max_win:
             save_dir = Path(__file__).parent / 'models'
 
@@ -544,7 +547,6 @@ class Tester:
             np.save(str(save_dir) + save_name, logalpha)
 
             self.max_return = result['episode_rewards']
-        """
 
         return result
 
@@ -576,15 +578,17 @@ class Tester:
             'blues_initial_properties': blue_properties,
         }
 
-        scenario_id = str(self.env.config.scenario_id)
-        dir_save = './test_scenario_' + scenario_id
+        dir_save = './test_engagement'
+        if not os.path.exists(dir_save):
+            os.mkdir(dir_save)
 
         with open(dir_save + '/initial_conds.json', 'w') as f:
             json.dump(initial_conds, f, indent=5)
 
     def make_time_plot(self):
-        scenario_id = str(self.env.config.scenario_id)
-        dir_save = './test_scenario_' + scenario_id
+        dir_save = './test_engagement'
+        if not os.path.exists(dir_save):
+            os.mkdir(dir_save)
 
         steps = self.steps_list
         eps = 1e-3
@@ -794,8 +798,9 @@ class Tester:
             'max num red agents': self.env.config.max_num_red_agents,
         }
 
-        scenario_id = str(self.env.config.scenario_id)
-        dir_save = './test_scenario_' + scenario_id
+        dir_save = './test_engagement'
+        if not os.path.exists(dir_save):
+            os.mkdir(dir_save)
 
         with open(dir_save + '/test_conds.json', 'w') as f:
             json.dump(test_conds, f, indent=5)
@@ -830,7 +835,7 @@ def main(is_debug):
     """
     from pathlib import Path
 
-    from config_selfplay_scenario_test import Config
+    from config_selfplay_test import Config
 
     if is_debug:
         print("Debug mode starts. May cause ray memory error.")
@@ -843,11 +848,6 @@ def main(is_debug):
     env.reset()
 
     config = Config()
-
-    scenario_id = str(config.scenario_id)
-    dir_save = './test_scenario_' + scenario_id
-    if not os.path.exists(dir_save):
-        os.mkdir(dir_save)
 
     grid_size = config.grid_size
     fov = config.fov
@@ -963,6 +963,10 @@ def main(is_debug):
     print(f" - num_blue_win = {result['num_blue_win']}")
     print(f" - num_draw = {result['draw']}")
     print(f" - num_no_contest = {result['no_contest']}")
+
+    dir_save = './test_engagement'
+    if not os.path.exists(dir_save):
+        os.mkdir(dir_save)
 
     with open(dir_save + '/result.json', 'w') as f:
         json.dump(result, f, indent=5)
