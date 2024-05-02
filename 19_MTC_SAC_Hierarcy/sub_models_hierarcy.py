@@ -608,7 +608,7 @@ def main():
     """ commander state and feature """
     commander_ch = config.commander_observation_channels  # 6
     commander_n_frames = config.commander_n_frames  # 1
-    
+
     commander_state_shape = (grid_size, grid_size, commander_ch * commander_n_frames)  # (15,15,6)
     commander_state = np.ones(shape=commander_state_shape)  # (15,15,6)
 
@@ -618,9 +618,12 @@ def main():
 
     commander_state = np.expand_dims(commander_state, axis=0)  # (1,25,25,6)
 
+    elapsed_time = np.random.randint(low=0, high=5, size=(1, 1))  # (1,1)
+
     commander_encoder = CommanderEncoder(config)
 
-    command_feature = commander_encoder(inputs=commander_state, time_step=3)  # (1,256)
+    command_feature = \
+        commander_encoder(inputs=commander_state, elapsed_time=elapsed_time)  # (1,256)
 
     """ agent observation """
     ch = config.observation_channels

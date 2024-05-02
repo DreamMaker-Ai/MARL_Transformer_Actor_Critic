@@ -11,7 +11,7 @@ import matplotlib.pyplot as plt
 import tensorflow as tf
 from pathlib import Path
 
-from config_hierarcy import Config
+from config_selfplay_2 import Config
 from worker_selfplay_2 import Worker
 from replay_team_reward_global_state_mtc_dec_pomdp import Replay
 from learner_selfplay_2 import Learner

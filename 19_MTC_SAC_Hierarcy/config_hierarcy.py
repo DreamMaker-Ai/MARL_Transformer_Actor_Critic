@@ -8,21 +8,22 @@ class Config:
 
         self.continual_learning = True  # False for the first_time learning
 
+        """ pool of blue networks """
         if self.continual_learning:
             with open('pool_of_networks.pickle', mode='br') as fi:
                 self.pool_of_networks = pickle.load(fi)
         else:
-            self.pool_of_networks = [0, ]  # initial pool of blue networks
+            self.pool_of_networks = [0, ]  # initial pool of blue networks=stationary
 
-        """ models for training """
-        self.model_dir = 'models/model_915000/'  # newest file -> 'ls -ltr'
+        """ red model for the training """
+        self.model_dir = 'models/model_85000/'  # newest file -> 'ls -ltr'
         # self.model_dir = None
 
-        self.alpha_dir = 'models/alpha_915000.npy'  # logalpha
+        self.alpha_dir = 'models/alpha_85000.npy'  # logalpha
         # self.alpha_dir = None
 
         if self.model_dir:  # starting steps for continual training
-            self.n0 = 915000  # learner update cycles. Should be read from tensorboard
+            self.n0 = 85000  # learner update cycles. Should be read from tensorboard
         else:
             self.n0 = 0
 
@@ -52,7 +53,6 @@ class Config:
         # Commander model
         self.commander_grid_size = 25
         self.command_update_cycle = 5
-        self.command_gamma = 0.6
 
         # Define gym spaces
         self.action_dim = 5

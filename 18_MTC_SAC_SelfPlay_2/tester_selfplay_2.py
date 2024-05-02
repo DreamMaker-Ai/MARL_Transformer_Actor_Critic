@@ -835,7 +835,7 @@ def main(is_debug):
     """
     from pathlib import Path
 
-    from config_selfplay_test import Config
+    from config_selfplay_2 import Config
 
     if is_debug:
         print("Debug mode starts. May cause ray memory error.")
@@ -844,8 +844,10 @@ def main(is_debug):
 
     ray.init(local_mode=is_debug, ignore_reinit_error=True)
 
+    pool_of_networks = [440000]
+
     env = BattleFieldStrategy()
-    env.reset()
+    env.reset(pool_of_networks=pool_of_networks)
 
     config = Config()
 
@@ -914,12 +916,12 @@ def main(is_debug):
 
     # """ Use the followings for the test
     # Load model
-    load_dir = Path(__file__).parent / 'reds_model'
-    load_name = '/model_440000/'
+    load_dir = Path(__file__).parent / 'trial/models'
+    load_name = '/model_1530000/'
     # load_name = '/best_return_model/'
     dummy_policy.load_weights(str(load_dir) + load_name)
 
-    load_name = '/alpha_440000.npy'
+    load_name = '/alpha_1530000.npy'
     # load_name = '/best_return_alpha.npy'
     logalpha = np.load(str(load_dir) + load_name)
     logalpha = tf.Variable(logalpha)

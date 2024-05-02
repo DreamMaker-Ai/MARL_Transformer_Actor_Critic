@@ -12,7 +12,7 @@ def main():
         'run-.-tag-mean_episode_len.csv'
     ]
     parent_dir = \
-        "15_MTC_SAC_POMDP_Continual/trial_continual/"
+        "18_MTC_SAC_SelfPlay_2/trial_0/"
     filelist = 'history/'
 
     colorlist = ['r', 'm', 'g', 'b', 'y']

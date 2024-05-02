@@ -5,8 +5,8 @@ import ray
 import tensorflow as tf
 import pickle
 
-from battlefield_strategy_hierarchy import BattleFieldStrategy
-from config_hierarcy import Config  # for build
+from battlefield_strategy_hierarchy_scenario_test import BattleFieldStrategy
+from config_hierarcy_scenario_test import Config  # for build
 from global_models_dec_pomdp import GlobalCNNModel  # for build
 from models_hierarchy import MarlTransformerHierarchyModel
 from utils_transformer_mtc_dec_pomdp import make_mask, make_po_attention_mask, \
@@ -27,7 +27,7 @@ class Learner:
         self.target_mtc = MarlTransformerHierarchyModel(config=self.env.config)
 
         if not self.env.config.continual_learning:
-            self.logalpha = tf.Variable(tf.math.log(0.5))
+            self.logalpha = tf.Variable(0.0)
 
         self.optimizer = tf.keras.optimizers.Adam(learning_rate=self.env.config.learning_rate)
 
@@ -46,7 +46,7 @@ class Learner:
         """
         # self.mtc.compile(optimizer=self.optimizer, loss='mse')
 
-        blue_network_id = [440000,]
+        blue_network_id = [0, ]
 
         env = BattleFieldStrategy()
         env.reset(pool_of_networks=blue_network_id)
@@ -95,6 +95,15 @@ class Learner:
 
         padded_pos = make_padded_pos(max_num_agents, pos_shape, agent_pos)  # (1,n,2*n_frames)
 
+        # Get commander state
+        commander_state_shape = (config.commander_grid_size,
+                                 config.commander_grid_size,
+                                 config.commander_observation_channels * config.commander_n_frames)
+        # (25,25,6)
+
+        commander_state = np.ones(shape=commander_state_shape)  # (25,25,6)
+        commander_state = np.expand_dims(commander_state, axis=0)  # (1,25,25,6)
+
         # Get mask
         mask = make_mask(alive_agents_ids, max_num_agents)  # (1,n)
 
@@ -111,10 +120,12 @@ class Learner:
 
         attention_mask = tf.cast(attention_mask, 'bool')
 
-        self.mtc([[padded_obs, padded_pos], global_state],
-                 mask, attention_mask, training=False)
-        self.target_mtc([[padded_obs, padded_pos], global_state],
-                        mask, attention_mask, training=False)
+        elapsed_time = np.zeros((1, 1))  # (1,1)
+
+        self.mtc([[padded_obs, padded_pos], global_state, commander_state],
+                 mask, attention_mask, elapsed_time=elapsed_time, training=False)
+        self.target_mtc([[padded_obs, padded_pos], global_state, commander_state],
+                        mask, attention_mask, elapsed_time=elapsed_time, training=False)
 
         # Load weights & alpha
         if self.env.config.model_dir:
@@ -154,6 +165,12 @@ class Learner:
                         next_attention_masks,  # (1,n,n), bool
                         global_state,  # (1,g,g,global_ch*global_n_frames)
                         next_global_state,  # (1,g,g,global_ch*global_n_frames)
+                        commander_state,  # (1,commander_g,commander_g,
+                                            commander_ch*commander_n_frames)
+                        next_commander_state,  # (1,commander_g,commander_g,
+                                            commander_ch*commander_n_frames)
+                        elapsed_time,  # (1,1)
+                        next_elapsed_time # (1,1)
                     )
 
                 ※ experience.states等で読み出し
@@ -184,6 +201,10 @@ class Learner:
             next_attention_masks = []
             global_state = []
             next_global_state = []
+            commander_state = []
+            next_commander_state = []
+            elapsed_time = []
+            next_elapsed_time = []
 
             for i in range(len(minibatch)):
                 obss.append(minibatch[i].obss)
@@ -201,6 +222,10 @@ class Learner:
                 next_attention_masks.append(minibatch[i].next_attention_masks)
                 global_state.append(minibatch[i].global_state)
                 next_global_state.append(minibatch[i].next_global_state)
+                commander_state.append(minibatch[i].commander_state)
+                next_commander_state.append(minibatch[i].next_commander_state)
+                elapsed_time.append(minibatch[i].elapsed_time)
+                next_elapsed_time.append(minibatch[i].next_elapsed_time)
 
             # list -> ndarray
             obss = np.vstack(obss)  # (b,n,2*fov+1,2*fov+1,ch*n_frames)
@@ -218,6 +243,12 @@ class Learner:
             next_attention_masks = np.vstack(next_attention_masks)  # (b,n,n), bool
             global_state = np.vstack(global_state)  # (b,g,g,global_ch*global_n_frames)
             next_global_state = np.vstack(next_global_state)  # (b,g,g,global_ch*global_n_frames)
+            commander_state = np.vstack(commander_state)
+            # (b,commander_g,commander_g,commande_ch*commander_n_frames)
+            next_commander_state = np.vstack(next_commander_state)
+            # (b,commander_g,commander_g,commande_ch*commander_n_frames)
+            elapsed_time = np.vstack(elapsed_time)  # (b,1)
+            next_elapsed_time = np.vstack(next_elapsed_time)  # (b,1)
 
             # ndarray -> tf.Tensor
             obss = tf.convert_to_tensor(obss, dtype=tf.float32)  # (b,n,2*fov+1,2*fov+1,ch*n_frames)
@@ -240,6 +271,12 @@ class Learner:
             # (b,g,g,global_ch*global_n_frames)
             next_global_state = tf.convert_to_tensor(next_global_state, dtype=tf.float32)
             # (b,g,g,global_ch*global_n_frames)
+            commander_state = tf.convert_to_tensor(commander_state, dtype=tf.float32)
+            # (b,commander_g,commander_g,commande_ch*commander_n_frames)
+            next_commander_state = tf.convert_to_tensor(next_commander_state, dtype=tf.float32)
+            # (b,commander_g,commander_g,commande_ch*commander_n_frames)
+            elapsed_time = tf.convert_to_tensor(elapsed_time, dtype=tf.float32)  # (b,1)
+            next_elapsed_time = tf.convert_to_tensor(next_elapsed_time, dtype=tf.float32)  # (b,1)
 
             num_alive_agents = tf.reduce_sum(masks, axis=-1)  # (b,)
 
@@ -248,8 +285,9 @@ class Learner:
             """ Update MTC """
             # Target valueの計算
             [next_action_logits, [next_q1, next_q2]], _ = \
-                self.target_mtc([[next_obss, next_poss], next_global_state],
-                                next_masks, next_attention_masks, training=False)
+                self.target_mtc([[next_obss, next_poss], next_global_state, next_commander_state],
+                                next_masks, next_attention_masks, elapsed_time=next_elapsed_time,
+                                training=False)
             # (b,n,action_dim), [(b,n,action_dim). (b,n,action_dim)]
 
             next_action_probs, next_action_logprobs = \
@@ -269,7 +307,8 @@ class Learner:
 
                 """ Critic Q loss """
                 [action_logits, [q1, q2]], _ = \
-                    self.mtc([[obss, poss], global_state], masks, attention_masks, training=False)
+                    self.mtc([[obss, poss], global_state, commander_state], masks, attention_masks,
+                             elapsed_time=elapsed_time, training=False)
                 # (b,n,action_dim) [(b,n,action_dim), (b,n,action_dim)]
 
                 action_probs, action_logprobs = self.mtc.process_action(action_logits, masks)

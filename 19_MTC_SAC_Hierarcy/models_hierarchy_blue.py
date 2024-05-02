@@ -3,9 +3,10 @@ import tensorflow as tf
 import tensorflow_probability as tfp
 import os
 import cv2
+from pathlib import Path
 
 from config_hierarcy import Config
-from sub_models_hierarcy import CNNModel, MultiHeadAttentionModel, PolicyModel, \
+from sub_models_hierarcy_blue import CNNModel, MultiHeadAttentionModel, PolicyModel, \
     SoftQModelGlobalState
 from global_models_dec_pomdp import GlobalCNNModel
 from commander_model import CommanderEncoder
@@ -22,7 +23,7 @@ class MarlTransformerHierarchyModel(tf.keras.models.Model):
                 command_state: (None,commander_g,commander_g,commander_ch*commander_n_frames)
              (alive_)mask: (None,n)
              attention_mask: (None,n,n)
-
+             elapsed_time: (None,1)
     :return: [policy_logits, [q1s, q2s]]:
                     [(None,n,action_dim), [(None,n,action_dim),(None,n,action_dim)]]
              [score1, score2]: [(None,num_heads,n,n),(None,num_heads,n,n)]
@@ -83,8 +84,8 @@ class MarlTransformerHierarchyModel(tf.keras.models.Model):
         self.policy = PolicyModel(config=self.config)
         self.value = SoftQModelGlobalState(config=self.config)
 
-    @tf.function
-    def call(self, x, mask, attention_mask, time_step, training=True):
+    # @tf.function
+    def call(self, x, mask, attention_mask, elapsed_time, training=True):
         """
          x=[[padded obs,padded_pos], global_obs, command_state]
                  padded_obs: (None,n,2*fov+1,2*fov+1,ch*n_frames)=(None,15,5,5,4*4)
@@ -93,6 +94,7 @@ class MarlTransformerHierarchyModel(tf.keras.models.Model):
                  command_state: (None,commander_g,commander_g,commander_ch*commander_n_frames)
              (alive_)mask: (None,n)
              attention_mask: (None,n,n)
+             elapsed_time: (None,1)
         """
         agents_obs = x[0][0]  # (None,15,5,5,16)
         agents_pos = x[0][1]  # (None,15,8)
@@ -103,8 +105,8 @@ class MarlTransformerHierarchyModel(tf.keras.models.Model):
         global_feature = self.global_cnn(global_state)  # (None,4*hidden_dim)=(None,256)
 
         """ Command feature by Commander Encoder layer """
-        command_feature = self.commander_encoder(commander_state,
-                                                 time_step)  # (None,4*hidden_dim)=(None,256)
+        command_feature = self.commander_encoder(inputs=commander_state, elapsed_time=elapsed_time)
+        # (None,4*hidden_dim)=(None,256)
 
         """ CNN layer """
         features_cnn = self.cnn([agents_obs, agents_pos], mask)  # (None,n,hidden_dim)=(None,15,64)
@@ -146,7 +148,7 @@ class MarlTransformerHierarchyModel(tf.keras.models.Model):
 
         return probs, log_probs
 
-    def sample_actions(self, x, mask, attention_mask, time_step, training=False):
+    def sample_actions(self, x, mask, attention_mask, elapsed_time, training=False):
         # Use only agents obs & pos.
         # x=[[padded obs,padded_pos], command_state]
         #   padded_obs: (None,n,2*fov+1,2*fov+1,ch*n_frames)=(None,15,5,5,16)
@@ -154,9 +156,10 @@ class MarlTransformerHierarchyModel(tf.keras.models.Model):
         #   command_state: (None,commander_g,commander_g,commander_ch*commander_n_frames)
         # mask: (b,n)
         # attention_mask: (b,n,n)
+        # elapsed_time: (b,1)
         """ action=5 if policyprobs=[0,0,0,0,0], that is or the dead or dummy agents """
 
-        command_feature = self.commander_encoder(x[1], time_step)
+        command_feature = self.commander_encoder(x[1], elapsed_time)  # (1,256)
 
         # [policy_logits, _], scores = self(states, mask, training=training)
         features_cnn = self.cnn(x[0], mask)
@@ -278,10 +281,12 @@ def main():
 
     commander_state = np.expand_dims(commander_state, axis=0)  # (1,25,25,6)
 
+    elapsed_time = np.random.randint(low=0, high=5, size=(1, 1))  # (1,1)
+
     commander_encoder = CommanderEncoder(config)
 
-    time_step = 3
-    command_feature = commander_encoder(inputs=commander_state, time_step=time_step)  # (1,256)
+    command_feature = \
+        commander_encoder(inputs=commander_state, elapsed_time=elapsed_time)  # (1,256)
 
     """ agent observation """
     ch = config.observation_channels
@@ -329,9 +334,24 @@ def main():
 
     [policy_logits, [q1s, q2s]], scores = \
         marl_transformer([[padded_obs, padded_pos], global_state, commander_state],
-                         mask, attention_mask, time_step, training=True)
+                         mask, attention_mask, elapsed_time, training=True)
 
     marl_transformer.summary()
+
+    """ Save initial model """
+    """
+    save_dir = Path(__file__).parent / 'models'
+
+    save_name = '/model_0/'
+    marl_transformer.save_weights(str(save_dir) + save_name)
+
+    marl_transformer.load_weights(str(save_dir) + save_name)
+
+    save_name = '/alpha_0'
+    logalpha = tf.Variable(0.0)
+    logalpha = logalpha.numpy()
+    np.save(str(save_dir) + save_name, logalpha)
+    """
 
     """ Summary """
     """
@@ -356,7 +376,7 @@ def main():
     """ Sample actions """
     actions, _ = \
         marl_transformer.sample_actions([[padded_obs, padded_pos], commander_state],
-                                        mask, attention_mask, time_step,
+                                        mask, attention_mask, elapsed_time,
                                         training=False)  # (b,n), int32
 
     print('\n')

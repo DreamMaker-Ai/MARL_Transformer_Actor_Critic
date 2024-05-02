@@ -8,6 +8,7 @@ from battlefield_strategy_hierarchy import BattleFieldStrategy
 from utils_gnn import get_alive_agents_ids
 from utils_transformer_mtc_dec_pomdp import make_mask, make_po_attention_mask, \
     make_padded_obs, make_padded_pos
+from observations_hierarchy import get_commander_observation, commander_state_resize
 
 
 # @ray.remote(num_cpus=1, num_gpus=0)  # cloud使用時
@@ -39,6 +40,12 @@ class Worker:
 
         self.pos_shape = (2 * self.env.config.n_frames,)  # (8,)
 
+        self.commander_obs_shape = \
+            (self.env.config.commander_grid_size,
+             self.env.config.commander_grid_size,
+             self.env.config.commander_observation_channels * self.env.config.commander_n_frames)
+        # (25,25,6)
+
         # Define local buffer
         self.buffer = []
 
@@ -47,6 +54,11 @@ class Worker:
         self.frames = None  # For each agent in env
         self.pos_frames = None
         self.prev_actions = None
+
+        self.commander_frames = None  # deque of (g,g,commander_ch)=(15,15,6)
+        self.commander_state = None
+        # (1,commander_g,commander_g,commander_ch*commander_n_frames)=(1,25,25,6)
+        self.next_commander_state = None
 
         self.alive_agents_ids = None  # For all agents, including dummy ones
         self.padded_obss = None
@@ -62,13 +74,18 @@ class Worker:
         self.step = None
 
         ### Initialize above Nones
-        observations, global_observation = self.env.reset(pool_of_networks)
-        self.reset_states(observations, global_observation)
+        observations, global_observation, commander_observation = self.env.reset(pool_of_networks)
+        self.reset_states(observations, global_observation, commander_observation)
 
-        self.mtc([[self.padded_obss, self.padded_poss], self.global_state],
-                 self.mask, self.attention_mask, training=True)  # build
+        # elapsed time
+        elapsed_time = self.step % self.env.config.command_update_cycle
+        elapsed_time = np.array([elapsed_time, ], dtype=np.float32)  # (1,)
+        elapsed_time = np.expand_dims(elapsed_time, axis=0)  # (1,1)
 
-    def reset_states(self, observations, global_observation):
+        self.mtc([[self.padded_obss, self.padded_poss], self.global_state, self.commander_state],
+                 self.mask, self.attention_mask, elapsed_time=elapsed_time, training=True)  # build
+
+    def reset_states(self, observations, global_observation, commander_observation):
         # TODO prev_actions
         """
         alive_agents_ids: list of alive agent id
@@ -87,6 +104,8 @@ class Worker:
              poss[red.id]: (2*n_frames,)=(2*4,)
 
              self.prev_actions[red.id]: int (TODO)
+
+             commander_observation: (g,g,commander_ch*commander_n_frames)
         """
 
         self.frames = {}
@@ -141,6 +160,17 @@ class Worker:
                             pos_shape=self.pos_shape,
                             raw_pos=poss)  # (1,n,2*n_frames)=(1,15,8)
 
+        # Commander state
+        self.commander_frames = deque([commander_observation] * self.env.config.commander_n_frames,
+                                      maxlen=self.env.config.commander_n_frames)
+
+        commander_state = np.concatenate(self.commander_frames, axis=-1)  # (15,15,6)
+
+        commander_state = commander_state_resize(
+            commander_state, self.env.config.commander_grid_size)  # (25,25,6)
+
+        self.commander_state = np.expand_dims(commander_state, axis=0)  # (1,25,25,6)
+
         # Get mask for the padding
         self.mask = make_mask(alive_agents_ids=self.alive_agents_ids,
                               max_num_agents=self.env.config.max_num_red_agents)  # (1,n)
@@ -190,6 +220,13 @@ class Worker:
                 next_attention_mask,  # append (1,n,n), bool
                 global_state,  # append (1,g,g,global_ch*global_n_frames)
                 next_global_state,  # append (1,g,g,global_ch*global_n_frames)
+                commander_state,  # append (1,commander_g,commander_g,
+                                            commander_ch*commander_n_frames)=(1,25,25,6)
+                next_commander_state,  # append (1,commander_g,commander_g,
+                                                 commander_ch*commander_n_frames)=(1,25,25,6)
+                elapsed_time,  # append (1,1)
+                next_elapsed_time,  # append (1,1)
+                                                
             )
         """
 
@@ -205,10 +242,24 @@ class Worker:
 
         # Rollout実施
         for i in range(self.batch_size):
+            if self.step % self.env.config.command_update_cycle == 0:
+                commander_observation = get_commander_observation(self.env)
+                self.commander_frames.append(commander_observation)  # (15,15,6)
+                commander_state = np.concatenate(self.commander_frames, axis=-1)  # (15,15,6)
+                commander_state = \
+                    commander_state_resize(commander_state,
+                                           self.env.config.commander_grid_size)  # (25,25,6)
+                self.commander_state = np.expand_dims(commander_state, axis=0)
+
+            elapsed_time = self.step % self.env.config.command_update_cycle
+            elapsed_time = np.array([elapsed_time, ], dtype=np.float32)  # (1,)
+            elapsed_time = np.expand_dims(elapsed_time, axis=0)  # (1,1)
+
             # acts: action=-1 for the dead or dummy agents.
             acts, _ = self.mtc.sample_actions(
-                [self.padded_obss, self.padded_poss],
-                self.mask, self.attention_mask, training=False)  # (1,n), int32
+                [[self.padded_obss, self.padded_poss], self.commander_state],
+                self.mask, self.attention_mask, elapsed_time=elapsed_time, training=False)
+            # (1,n), int32
 
             # get alive_agents & all agents actions.
             # * padded_actions: action=-1 for dead or dummy agents for
@@ -224,8 +275,9 @@ class Worker:
                 padded_actions[0, idx] = actions[agent_id]
 
             # One step of Lanchester simulation, for alive agents in env
-            next_obserations, rewards, dones, infos, reward, done, next_global_observation = \
-                self.env.step(actions)
+            # next_commander_observation: (15,15,6)
+            next_obserations, rewards, dones, infos, reward, done, next_global_observation, \
+            next_commander_observation = self.env.step(actions)
 
             # Make next_agents_states, next_agents_adjs, and next_alive_agents_ids,
             # including dummy ones
@@ -279,6 +331,16 @@ class Worker:
 
             next_global_state = np.expand_dims(next_global_state, axis=0)
             # (1,g,g,global_ch*global_n_frames)
+
+            # commander state
+            if self.step % self.env.config.command_update_cycle == 0:
+                self.commander_frames.append(next_commander_observation)  # append (15,15,6)
+
+                next_commander_state = np.concatenate(self.commander_frames, axis=-1)  # (15,15,6)
+                next_commander_state = commander_state_resize(
+                    next_commander_state, self.env.config.commander_grid_size)  # (25,25,6)
+                self.next_commander_state = \
+                    np.expand_dims(next_commander_state, axis=0)  # (1,25,25,6)
 
             # Get next mask for the padding
             next_mask = \
@@ -342,6 +404,11 @@ class Worker:
             global_done = np.expand_dims(
                 np.array([done], dtype=bool), axis=-1)  # append (1,1)
 
+            # next_step = self.step + 1
+            # next_elapsed_time = next_step % self.env.config.command_update_cycle
+            # next_elapsed_time = np.array([next_elapsed_time,], dtype=np.float32)  # (1,)
+            # next_elapsed_time = np.expand_dims(next_elapsed_time, axis=0)  # (1,1)
+
             transition = (
                 self.padded_obss,  # append (1,n,2*fov+1,2*fov+1,ch*n_frames)
                 self.padded_poss,  # append (1,n,2*n_frames)
@@ -358,18 +425,27 @@ class Worker:
                 next_attention_mask,  # append (1,n,n), bool
                 self.global_state,  # append (1,g,g,global_ch*global_n_frames)
                 next_global_state,  # append (1,g,g,global_ch*global_n_frames)
+                self.commander_state,
+                # append (1,commander_g,commander_g, commander_ch*commander_n_frames)
+                self.next_commander_state,
+                # append (1,commander_g,commander_g, commander_ch*commander_n_frames)
+                elapsed_time,  # append (1,1)
+                elapsed_time + 1,  # append (1,1)
             )
 
             self.buffer.append(transition)
 
             if dones['all_dones']:
                 # print(f'episode reward = {self.episode_return}')
-                observations, global_observation = self.env.reset(pool_of_networks )
-                self.reset_states(observations, global_observation)
+                observations, global_observation, commander_observation = \
+                    self.env.reset(pool_of_networks)
+                self.reset_states(observations, global_observation, commander_observation)
             else:
                 self.alive_agents_ids = next_alive_agents_ids
                 self.padded_obss = next_padded_obss  # (1,15,5,5,16)
                 self.padded_poss = next_padded_poss  # (1,15,8)
+                # if self.step % self.env.config.command_update_cycle == 0:
+                #    self.commander_state = next_commander_state  # (1,25,25,6)
                 self.mask = next_mask  # (1,15)
                 self.attention_mask = next_attention_mask  # (1,15,15)
 

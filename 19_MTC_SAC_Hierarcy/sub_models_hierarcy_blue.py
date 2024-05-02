@@ -618,9 +618,12 @@ def main():
 
     commander_state = np.expand_dims(commander_state, axis=0)  # (1,25,25,6)
 
+    elapsed_time = np.random.randint(low=0, high=5, size=(1, 1))  # (1,1)
+
     commander_encoder = CommanderEncoder(config)
 
-    command_feature = commander_encoder(inputs=commander_state, time_step=3)  # (1,256)
+    command_feature = \
+        commander_encoder(inputs=commander_state, elapsed_time=elapsed_time)  # (1,256)
 
     """ agent observation """
     ch = config.observation_channels

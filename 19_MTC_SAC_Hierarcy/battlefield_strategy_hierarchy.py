@@ -17,7 +17,8 @@ from generate_agents_in_env import generate_red_team, generate_blue_team
 from rewards import get_consolidation_of_force_rewards, get_economy_of_force_rewards
 from observations_hierarchy \
     import get_observations, get_global_observation, \
-    get_global_blues_observation, get_blue_observations_po_0
+    get_global_blues_observation, get_blue_observations_po_0, \
+    get_commander_observation, get_blue_commander_observation, commander_state_resize
 from engage import engage_and_get_rewards, compute_engage_mask, get_dones
 
 from generate_movies_dec_pomdp import MakeAnimation
@@ -83,6 +84,9 @@ class BattleFieldStrategy(gym.Env):
         self.blue_global_frames = None  # Necessary only for build
         self.blue_global_state = None
 
+        self.blue_commander_frames = None
+        self.blue_commander_state = None
+
         self.blue_alive_agents_ids = None  # For all agents, including dummy ones
         self.blue_padded_obss = None
         self.blue_padded_poss = None
@@ -106,6 +110,21 @@ class BattleFieldStrategy(gym.Env):
 
         global_state = np.ones(shape=global_state_shape)  # (15,15,24), for build
         global_state = np.expand_dims(global_state, axis=0)  # (1,15,15,24)
+
+        """ commander state and feature """
+        blue_commander_ch = self.config.commander_observation_channels
+        blue_commander_n_frames = self.config.commander_n_frames
+
+        blue_commander_state_shape = (self.config.grid_size, self.config.grid_size,
+                                      blue_commander_ch * blue_commander_n_frames)  # (15,15,6)
+        blue_commander_state = np.ones(shape=blue_commander_state_shape)  # (15,15,6)
+
+        blue_commander_state = commander_state_resize(blue_commander_state,
+                                                      self.config.commander_grid_size)  # (25,25,6)
+
+        blue_commander_state = np.expand_dims(blue_commander_state, axis=0)  # (1,25,25,6)
+
+        elapsed_time = np.zeros((1, 1))  # (1,1)
 
         """ agent observation """
         ch = self.config.observation_channels
@@ -150,17 +169,18 @@ class BattleFieldStrategy(gym.Env):
         attention_mask = tf.cast(attention_mask, 'bool')
 
         # Make dummy policy and load learned weights
-        dummy_policy = MarlTransformerGlobalStateModel(config=self.config)
+        dummy_policy = MarlTransformerHierarchyModel(config=self.config)
 
-        dummy_policy([[padded_obs, padded_pos], global_state], mask, attention_mask, training=False)
+        dummy_policy([[padded_obs, padded_pos], global_state, blue_commander_state],
+                     mask, attention_mask, elapsed_time=elapsed_time, training=False)
 
         # """ Use the followings for the test
         # Load model
-        load_dir = Path(__file__).parent / 'blues_model'
-        load_name = '/model_440000/'
+        load_dir = Path(__file__).parent / 'models'
+        load_name = '/model_0/'
         dummy_policy.load_weights(str(load_dir) + load_name)
 
-        load_name = '/alpha_440000.npy'
+        load_name = '/alpha_0.npy'
         logalpha = np.load(str(load_dir) + load_name)
         logalpha = tf.Variable(logalpha)
 
@@ -183,17 +203,24 @@ class BattleFieldStrategy(gym.Env):
 
         self.step_count = 0
 
+        """ reds """
         observations = get_observations(self)  # Get initial observations of agents (reds)
 
         global_observation = get_global_observation(self)
 
+        commander_observation = get_commander_observation(self)  # (15,15,6)
+
+        """ blues """
         blue_observations = \
             get_blue_observations_po_0(self)  # Get initial observations of agents (blues)
 
         global_blue_observation = get_global_blues_observation(self)
 
+        blue_commander_observation = get_blue_commander_observation(self)  # (15,15,6)
+
         """ Initialize blue observations """
-        self.initialize_blue_obss_and_poss(blue_observations, global_blue_observation)
+        self.initialize_blue_obss_and_poss(
+            blue_observations, global_blue_observation, blue_commander_observation)
 
         self.make_animation = MakeAnimation(self)  # Animation generator
 
@@ -201,10 +228,16 @@ class BattleFieldStrategy(gym.Env):
 
         """ Load weights to policy """
         if len(pool_of_networks) > 1:  # worker
-            self.blue_network_id = random.choice(pool_of_networks)
-            # print(pool_of_networks, self.blue_network_id)
+            if np.random.rand() < 0.3:
+                """ stationary blue agents will be selected for 30% of the training """
+                self.blue_network_id = 0
+            else:
+                """ blue agents will be randomly selected from the pool_of_checkpoints 
+                for rest of 70% of the training """
 
-            if self.blue_network_id != 0:  # chekpoints
+                self.blue_network_id = random.choice(pool_of_networks)
+                # print(pool_of_networks, self.blue_network_id)
+
                 load_dir = Path(__file__).parent / 'models'
                 load_name = '/model_' + str(self.blue_network_id) + '/'
                 self.blue_policy.load_weights(str(load_dir) + load_name)
@@ -213,19 +246,13 @@ class BattleFieldStrategy(gym.Env):
                 log_blue_alpha = np.load(str(load_dir) + load_name)
                 self.blue_alpha = tf.Variable(log_blue_alpha)
 
-            elif self.blue_network_id == 0:  # stationary blues
-                load_dir = Path(__file__).parent / 'models'
-                load_name = '/model_' + str(pool_of_networks[1]) + '/'
-                self.blue_policy.load_weights(str(load_dir) + load_name)
-
-                load_name = '/alpha_' + str(pool_of_networks[1]) + '.npy'
-                log_blue_alpha = np.load(str(load_dir) + load_name)
-                self.blue_alpha = tf.Variable(log_blue_alpha)
-
         else:  # tester, learner
+            # test is done against stationary blue agents
+            # learner is just for initial build
+
             self.blue_network_id = pool_of_networks[0]
 
-            load_dir = Path(__file__).parent / 'blues_model'
+            load_dir = Path(__file__).parent / 'models'
             load_name = '/model_' + str(self.blue_network_id) + '/'
             self.blue_policy.load_weights(str(load_dir) + load_name)
 
@@ -233,9 +260,10 @@ class BattleFieldStrategy(gym.Env):
             log_blue_alpha = np.load(str(load_dir) + load_name)
             self.blue_alpha = tf.Variable(log_blue_alpha)
 
-        return observations, global_observation
+        return observations, global_observation, commander_observation
 
-    def initialize_blue_obss_and_poss(self, blue_observations, global_observation):
+    def initialize_blue_obss_and_poss(self, blue_observations, global_observation,
+                                      blue_commander_observation):
         self.blue_frames = {}
         self.blue_pos_frames = {}
         obss = {}
@@ -284,6 +312,19 @@ class BattleFieldStrategy(gym.Env):
         # (g,g,global_ch*global_n_frames)
         self.blue_global_state = np.expand_dims(self.blue_global_frames, axis=0)
         # (1,g,g,global_ch*global_n_frames)
+
+        self.blue_commander_frames = \
+            deque([blue_commander_observation] * self.config.commander_n_frames,
+                  maxlen=self.config.commander_n_frames)
+        blue_commander_state = \
+            np.concatenate(self.blue_commander_frames, axis=2).astype(np.float32)
+        # (g,g,commander_ch*commander_n_frames)
+
+        blue_commander_state = commander_state_resize(blue_commander_state,
+                                                      self.config.commander_grid_size)  # (25,25,6)
+
+        self.blue_commander_state = np.expand_dims(blue_commander_state, axis=0)
+        # (1,commander_g,commander_g,commander_ch*commander_n_frames)=(1,25,25,6)
 
         # Get alive mask for the padding
         self.blue_mask = make_mask(alive_agents_ids=self.blue_alive_agents_ids,
@@ -551,13 +592,27 @@ class BattleFieldStrategy(gym.Env):
         # 5. Get (next) observations after engagement, red_agents
         observations = get_observations(self)
 
+        commander_observation = get_commander_observation(self)  # (15,15,6)
+
         # Update observations and positions of blue_agents
         self.update_blues_states()
+
+        blue_commander_observation = get_blue_commander_observation(self)  # (15,15,6)
+        self.blue_commander_frames.append(blue_commander_observation)
+
+        blue_commander_state = \
+            np.concatenate(self.blue_commander_frames, axis=-1).astype(np.float32)  # (15,15,6)
+
+        blue_commander_state = commander_state_resize(blue_commander_state,
+                                                      self.config.commander_grid_size)  # (25,25,6)
+
+        self.blue_commander_state = np.expand_dims(blue_commander_state, axis=0)  # (1,25,25,6)
 
         # Get (next) global observations
         global_observation = get_global_observation(self)
 
-        return observations, rewards, dones, infos, reward, done, global_observation
+        return observations, rewards, dones, infos, reward, done, global_observation, \
+               commander_observation
 
     def update_blues_states(self):
         """ Update blue agents obss & poss after engagement """
@@ -632,9 +687,15 @@ class BattleFieldStrategy(gym.Env):
 
     def get_blue_actions(self):
         """ get blues actions as dictionary """
+        elapsed_time = self.step_count % self.config.command_update_cycle
+        elapsed_time = np.array([elapsed_time, ], dtype=np.float32)  # (1,)
+        elapsed_time = np.expand_dims(elapsed_time, axis=0)  # (1,1)
+
         blue_acts, _ = \
-            self.blue_policy.sample_actions([self.blue_padded_obss, self.blue_padded_poss],
+            self.blue_policy.sample_actions([[self.blue_padded_obss, self.blue_padded_poss],
+                                             self.blue_commander_state],
                                             self.blue_mask, self.blue_attention_mask,
+                                            elapsed_time=elapsed_time,
                                             training=False)  # blue_acts: (1,n)
 
         # get alive_agents & all agents actions. action=0 <- do nothing

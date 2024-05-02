@@ -9,10 +9,11 @@ import tensorflow as tf
 import numpy as np
 from collections import deque
 
-from battlefield_strategy_hierarchy import BattleFieldStrategy
+from battlefield_strategy_hierarchy_scenario_test import BattleFieldStrategy
 
 from models_hierarchy import MarlTransformerHierarchyModel
 from global_models_dec_pomdp import GlobalCNNModel
+from observations_hierarchy import get_commander_observation, commander_state_resize
 
 from utils_gnn import get_alive_agents_ids
 from utils_transformer_mtc_dec_pomdp import make_mask, make_po_attention_mask, \
@@ -174,6 +175,8 @@ class Tester:
 
         self.global_n_frames = self.env.config.global_n_frames  # frame stacks of global states
 
+        self.commander_n_frames = self.env.config.commander_n_frames
+
         # Make an actor-critic network
         self.policy = MarlTransformerHierarchyModel(config=self.env.config)
 
@@ -182,6 +185,11 @@ class Tester:
         self.frames = None  # For each agent in env
         self.pos_frames = None  # position of agent
         self.prev_actions = None
+
+        self.commander_frames = None  # deque of (g,g,commander_ch)=(15,15,6)
+        self.commander_state = None
+        # (1,commander_g,commander_g,commander_ch*commander_n_frames)=(1,25,25,6)
+        self.next_commander_state = None
 
         self.global_frames = None  # For frame stack og global states
 
@@ -198,12 +206,14 @@ class Tester:
         # self.episode_reward = None
         self.step = None
 
-        # define blue_agents network id  in 'blues_model'
-        self.blue_network_id = [440000, ]
+        """ Define the blue_agents network-id in 'blues_model' for test """
+        # self.blue_network_id = [0, ]
+        self.blue_network_id = [365000, ]
 
         ### Initialize above Nones
-        observations, global_state = self.env.reset(pool_of_networks=self.blue_network_id)
-        self.reset_states(observations, global_state)
+        observations, global_state, commander_observation = \
+            self.env.reset(pool_of_networks=self.blue_network_id)
+        self.reset_states(observations, global_state, commander_observation)
 
         # make_animation
         if self.env.config.make_animation:
@@ -213,7 +223,7 @@ class Tester:
         self.num_max_win = -1
         self.max_return = -1000000
 
-    def reset_states(self, observations, global_state):
+    def reset_states(self, observations, global_state, commander_observation):
         # TODO prev_actions
         """
         alive_agents_ids: list of alive agent id
@@ -232,6 +242,8 @@ class Tester:
              poss[red.id]: (2*n_frames,)=(2*4,)
 
              self.prev_actions[red.id]: int (TODO)
+
+            commander_observation: (g,g,commander_ch*commander_n_frames)
         """
 
         self.frames = {}
@@ -239,6 +251,9 @@ class Tester:
         obss = {}
         poss = {}
         self.prev_actions = {}  # TODO
+
+        # reset episode variables
+        self.step = 0
 
         for red in self.env.reds:
             # all reds are alive when reset
@@ -283,6 +298,17 @@ class Tester:
         self.global_state = np.expand_dims(self.global_frames, axis=0)
         # (1,g,g,global_ch*global_n_frames)
 
+        # Commander state
+        self.commander_frames = deque([commander_observation] * self.commander_n_frames,
+                                      maxlen=self.commander_n_frames)
+
+        commander_state = np.concatenate(self.commander_frames, axis=-1)  # (15,15,6)
+
+        commander_state = commander_state_resize(
+            commander_state, self.env.config.commander_grid_size)  # (25,25,6)
+
+        self.commander_state = np.expand_dims(commander_state, axis=0)  # (1,25,25,6)
+
         # Get alive mask for the padding
         self.mask = make_mask(alive_agents_ids=self.alive_agents_ids,
                               max_num_agents=self.env.config.max_num_red_agents)  # (1,n)
@@ -297,11 +323,12 @@ class Tester:
             )  # (1,n,n)
 
         # Build policy
-        self.policy([[self.padded_obss, self.padded_poss], self.global_state],
-                    self.mask, self.attention_mask, training=False)
+        elapsed_time = self.step % self.env.config.command_update_cycle
+        elapsed_time = np.array([elapsed_time, ], dtype=np.float32)  # (1,)
+        elapsed_time = np.expand_dims(elapsed_time, axis=0)  # (1,1)
 
-        # reset episode variables
-        self.step = 0
+        self.policy([[self.padded_obss, self.padded_poss], self.global_state, self.commander_state],
+                    self.mask, self.attention_mask, elapsed_time=elapsed_time, training=False)
 
     def initialize_results(self):
         results = {}
@@ -349,10 +376,23 @@ class Tester:
                 self.initialize_time_plot()
 
             while not dones['all_dones']:
+                if self.step % self.env.config.command_update_cycle == 0:
+                    commander_observation = get_commander_observation(self.env)
+                    self.commander_frames.append(commander_observation)  # (15,15,6)
+                    commander_state = np.concatenate(self.commander_frames, axis=-1)  # (15,15,6)
+                    commander_state = \
+                        commander_state_resize(commander_state,
+                                               self.env.config.commander_grid_size)  # (25,25,6)
+                    self.commander_state = np.expand_dims(commander_state, axis=0)
+
+                elapsed_time = self.step % self.env.config.command_update_cycle
+                elapsed_time = np.array([elapsed_time, ], dtype=np.float32)  # (1,)
+                elapsed_time = np.expand_dims(elapsed_time, axis=0)  # (1,1)
 
                 acts, scores = \
-                    self.policy.sample_actions([self.padded_obss, self.padded_poss],
-                                               self.mask, self.attention_mask, training=False)
+                    self.policy.sample_actions([
+                        [self.padded_obss, self.padded_poss], self.commander_state],
+                        self.mask, self.attention_mask, elapsed_time=elapsed_time, training=False)
                 # acts:(1,n), [score1, score2]:[(1,num_heads,n,n),(1,num_heads,n,n)]
 
                 # get alive_agents & all agents actions. action=0 <- do nothing
@@ -364,7 +404,9 @@ class Tester:
 
                 # One step of Lanchester simulation, for alive agents in env
                 # The tester does not use global state.
-                next_obserations, rewards, dones, infos, reward, done, _ = self.env.step(actions)
+                # next_commander_observation: (15,15,6)
+                next_obserations, rewards, dones, infos, reward, done, _, \
+                next_commander_observation = self.env.step(actions)
 
                 # Make next_agents_states, next_agents_adjs, and next_alive_agents_ids,
                 # including dummy ones
@@ -408,6 +450,17 @@ class Tester:
                         pos_shape=self.pos_shape,
                         raw_pos=next_poss
                     )  # (1,n,2*n_frames)=(1,15,8)
+
+                # commander state
+                if self.step % self.env.config.command_update_cycle == 0:
+                    self.commander_frames.append(next_commander_observation)  # append (15,15,6)
+
+                    next_commander_state = np.concatenate(self.commander_frames,
+                                                          axis=-1)  # (15,15,6)
+                    next_commander_state = commander_state_resize(
+                        next_commander_state, self.env.config.commander_grid_size)  # (25,25,6)
+                    self.next_commander_state = np.expand_dims(next_commander_state,
+                                                               axis=0)  # (1,25,25,6)
 
                 # The tester does not use global state.
 
@@ -507,13 +560,16 @@ class Tester:
                         self.env.make_animation_attention_map.generate_movies()
 
                     # Reset env
+                    observations, global_state, commander_observation = \
+                        self.env.reset(self.blue_network_id)
+                    self.reset_states(observations, global_state, commander_observation)
 
-                    observations, global_state = self.env.reset(self.blue_network_id)
-                    self.reset_states(observations, global_state)
                 else:  # dones['all_done'] ではない時
                     self.alive_agents_ids = next_alive_agents_ids
                     self.padded_obss = next_padded_obss  # (1,5,5,5,16)
                     self.padded_poss = next_padded_poss  # (1,15,8)
+                    # if self.step % self.env.config.command_update_cycle == 0:
+                    #    self.commander_state = next_commander_state  # (1,25,25,6)
                     self.mask = next_mask  # (1,15)
                     self.attention_mask = next_attention_mask  # (1,15,15)
 
@@ -524,6 +580,7 @@ class Tester:
 
         result = summarize_results(results)
 
+        """
         if result['num_red_win'] >= self.num_max_win:
             save_dir = Path(__file__).parent / 'models'
 
@@ -547,6 +604,7 @@ class Tester:
             np.save(str(save_dir) + save_name, logalpha)
 
             self.max_return = result['episode_rewards']
+        """
 
         return result
 
@@ -578,17 +636,15 @@ class Tester:
             'blues_initial_properties': blue_properties,
         }
 
-        dir_save = './test_engagement'
-        if not os.path.exists(dir_save):
-            os.mkdir(dir_save)
+        scenario_id = str(self.env.config.scenario_id)
+        dir_save = './test_scenario_' + scenario_id
 
         with open(dir_save + '/initial_conds.json', 'w') as f:
             json.dump(initial_conds, f, indent=5)
 
     def make_time_plot(self):
-        dir_save = './test_engagement'
-        if not os.path.exists(dir_save):
-            os.mkdir(dir_save)
+        scenario_id = str(self.env.config.scenario_id)
+        dir_save = './test_scenario_' + scenario_id
 
         steps = self.steps_list
         eps = 1e-3
@@ -798,9 +854,8 @@ class Tester:
             'max num red agents': self.env.config.max_num_red_agents,
         }
 
-        dir_save = './test_engagement'
-        if not os.path.exists(dir_save):
-            os.mkdir(dir_save)
+        scenario_id = str(self.env.config.scenario_id)
+        dir_save = './test_scenario_' + scenario_id
 
         with open(dir_save + '/test_conds.json', 'w') as f:
             json.dump(test_conds, f, indent=5)
@@ -835,7 +890,7 @@ def main(is_debug):
     """
     from pathlib import Path
 
-    from config_selfplay_test import Config
+    from config_hierarcy_scenario_test import Config
 
     if is_debug:
         print("Debug mode starts. May cause ray memory error.")
@@ -844,10 +899,12 @@ def main(is_debug):
 
     ray.init(local_mode=is_debug, ignore_reinit_error=True)
 
-    env = BattleFieldStrategy()
-    env.reset()
-
     config = Config()
+
+    scenario_id = str(config.scenario_id)
+    dir_save = './test_scenario_' + scenario_id
+    if not os.path.exists(dir_save):
+        os.mkdir(dir_save)
 
     grid_size = config.grid_size
     fov = config.fov
@@ -891,6 +948,15 @@ def main(is_debug):
 
     padded_pos = make_padded_pos(max_num_agents, pos_shape, agent_pos)  # (1,n,2*n_frames)
 
+    # Get commander state
+    commander_state_shape = (config.commander_grid_size,
+                             config.commander_grid_size,
+                             config.commander_observation_channels * config.commander_n_frames)
+    # (25,25,6)
+
+    commander_state = np.ones(shape=commander_state_shape)  # (25,25,6)
+    commander_state = np.expand_dims(commander_state, axis=0)  # (1,25,25,6)
+
     # Get mask
     mask = make_mask(alive_agents_ids, max_num_agents)  # (1,n)
 
@@ -910,16 +976,19 @@ def main(is_debug):
     # Make dummy policy and load learned weights
     dummy_policy = MarlTransformerHierarchyModel(config=config)
 
-    dummy_policy([[padded_obs, padded_pos], global_state], mask, attention_mask, training=False)
+    elapsed_time = np.zeros((1, 1))  # (1,1)
+
+    dummy_policy([[padded_obs, padded_pos], global_state, commander_state],
+                 mask, attention_mask, elapsed_time=elapsed_time, training=False)
 
     # """ Use the followings for the test
     # Load model
-    load_dir = Path(__file__).parent / 'reds_model'
-    load_name = '/model_440000/'
+    load_dir = Path(__file__).parent / 'reds_test_model'
+    load_name = '/model_365000/'
     # load_name = '/best_return_model/'
     dummy_policy.load_weights(str(load_dir) + load_name)
 
-    load_name = '/alpha_440000.npy'
+    load_name = '/alpha_365000.npy'
     # load_name = '/best_return_alpha.npy'
     logalpha = np.load(str(load_dir) + load_name)
     logalpha = tf.Variable(logalpha)
@@ -964,9 +1033,9 @@ def main(is_debug):
     print(f" - num_draw = {result['draw']}")
     print(f" - num_no_contest = {result['no_contest']}")
 
-    dir_save = './test_engagement'
-    if not os.path.exists(dir_save):
-        os.mkdir(dir_save)
+    # dir_save = './test_engagement'
+    # if not os.path.exists(dir_save):
+    #     os.mkdir(dir_save)
 
     with open(dir_save + '/result.json', 'w') as f:
         json.dump(result, f, indent=5)

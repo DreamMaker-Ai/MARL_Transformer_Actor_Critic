@@ -93,17 +93,6 @@ class CommanderCNNModel(tf.keras.models.Model):
 
         return feature
 
-    def command_decay(self, feature, t):
-        """
-        :param feature: (b,hidden_dim*4)=(b,256)
-        :param t: simulation time_step
-        :return: decayed feature
-        """
-        command_time = t % self.config.command_update_cycle
-        discount = self.config.command_gamma ** command_time
-
-        return feature * discount
-
     def build_graph(self):
         """ For summary & plot_model """
         x = tf.keras.layers.Input(
@@ -122,6 +111,37 @@ class CommanderCNNModel(tf.keras.models.Model):
         return model
 
 
+class ElapsedTimeEncoder:
+    def __init__(self, config, **kwargs):
+        # depth = hidden_dim * 4 = 256
+        # h_dim = depth/2 = 128
+
+        super(ElapsedTimeEncoder, self).__init__(**kwargs)
+
+        self.config = config
+
+        depth = self.config.hidden_dim * 4  # 256
+        h_dim = depth / 2
+
+        depths = np.arange(h_dim) / h_dim  # (h_dim,)
+        depths = np.expand_dims(depths, axis=0)  # (1,h_dim)
+
+        self.angle_rates = 1 / (1000 ** depths)  # (1,h_dim)
+
+    def call(self, elapsed_time):
+        # elapsed_time: (b,1)
+        # return: encoded_elapsed_time: (b,hidden_dim*4)=(b,256)
+
+        angle_rads = elapsed_time * self.angle_rates  # (b, h_dim)
+
+        encoded_elapsed_time = np.concatenate([np.sin(angle_rads), np.cos(angle_rads)],
+                                              axis=-1)  # (b,2*h_dim)=(b,depth)=(b,4*hidden_dim)
+
+        encoded_elapsed_time = tf.cast(encoded_elapsed_time, dtype=tf.float32)
+
+        return encoded_elapsed_time  # (b,256)
+
+
 class CommanderEncoder(tf.keras.models.Model):
     """
     Model: "commander_encoder"
@@ -130,6 +150,8 @@ class CommanderEncoder(tf.keras.models.Model):
     =================================================================
      commander_cnn_model_1 (Comm  multiple                 258944
      anderCNNModel)
+
+     add (Add)                   multiple                  0
 
     =================================================================
     Total params: 258,944
@@ -143,19 +165,25 @@ class CommanderEncoder(tf.keras.models.Model):
 
         self.config = config
         self.commander_cnn = CommanderCNNModel(self.config)
+        self.elapsed_time_encoder = ElapsedTimeEncoder(self.config)
+        self.add1 = tf.keras.layers.Add()
 
-    @tf.function
-    def call(self, inputs, time_step):
+    def call(self, inputs, elapsed_time):
         """
         :param inputs: (b,commander_grid,commander_grid,
                         commander_observation_channels*commander_n_frames)
-        :param time_step:
-        :return: discounted feature
+        :param elapsed_time:  (b,1)
+        :return: commander feature
         """
-        command_feature = self.commander_cnn(inputs)  # (b,4*hidden_dim)=(b,256)
-        discounted_feature = self.commander_cnn.command_decay(command_feature, time_step)
+        cnn_feature = self.commander_cnn(inputs)  # (b,4*hidden_dim)=(b,256)
+        encoded_elapsed_time = self.elapsed_time_encoder.call(elapsed_time)
+        # (b,4*hidden_dim)=(b,256)
 
-        return discounted_feature
+        scale = tf.math.sqrt(tf.cast(self.config.hidden_dim * 4, tf.float32))
+
+        commander_feature = self.add1([cnn_feature * scale, encoded_elapsed_time])  # (b,256)
+
+        return commander_feature
 
 
 def main():
@@ -191,9 +219,10 @@ def main():
 
     encoder = CommanderEncoder(config)
 
-    for t in range(11):
-        discounted_feature = encoder(states, t)
-        print(t, discounted_feature[0, 0])
+    elapsed_time = np.random.randint(low=0, high=10, size=(config.batch_size, 1))  # (16,1)
+
+    commander_feature = encoder(states, elapsed_time)
+    print(elapsed_time[0, 0], commander_feature[0, 0])
 
     encoder.summary()
 
