@@ -435,3 +435,21 @@ Compare_13_14_history_plots/
 19_Scenario_Test/old/
 
 19_Scenario_Test/reds_test_model/
+
+19_MTC_SAC_Hierarcy/
+
+19_Scenario_Test_with_Blue_Commander/
+
+19_Scenario_Test/
+
+19_Scenario_Test_with_Local_Blues/
+
+19_Test_with_Local_Blues/
+
+20_MTC_SAC_VAE/Commander_VAE/images/
+
+20_MTC_SAC_VAE/Commander_VAE/log/
+
+20_MTC_SAC_VAE/Commander_VAE/vaes/
+
+20_MTC_SAC_VAE/Commander_VAE/__pycache__/

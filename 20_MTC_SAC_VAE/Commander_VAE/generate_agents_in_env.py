@@ -1,12 +1,9 @@
 import numpy as np
 import matplotlib.pyplot as plt
 
-from config_hierarcy_scenario_test import Config
+from config_for_vae_training import Config
 # from generate_env import random_shape_maze
 from agents_in_env import BLUE, RED
-from utils import summary_of_team, simulate_lanchester, \
-    plot_force_history, plot_efficiency_history, \
-    visualize_blues_num_map, visualize_reds_num_map, visualize_battlefield_agents_num_map
 
 
 def compute_initial_total_force_and_ef(agents):
@@ -46,6 +43,32 @@ def check_blues(x, y, blues):
     return blues_exist
 
 
+def allocate_red_pos(battlefield, blues, offset=5):
+    obs_exists = True  # Obstacle exists
+    blue_exists = True  # blue agent exists
+
+    while obs_exists or blue_exists:
+        x = np.random.randint(low=offset, high=battlefield.shape[0] - offset)
+        y = np.random.randint(low=offset, high=battlefield.shape[1] - offset)
+
+        obs_exists = check_obstacles(x, y, battlefield)
+        blue_exists = check_blues(x, y, blues)
+
+    return [x, y]
+
+
+def allocate_blue_pos(battlefield, offset=5):
+    obs_exists = True  # Obstacle exist
+
+    while obs_exists:
+        x = np.random.randint(low=offset, high=battlefield.shape[0] - offset)
+        y = np.random.randint(low=offset, high=battlefield.shape[1] - offset)
+
+        obs_exists = check_obstacles(x, y, battlefield)
+
+    return [x, y]
+
+
 def generate_blue_team(agent_class, config, battlefield):
     """
     Call this for generating the blue team
@@ -63,12 +86,14 @@ def generate_blue_team(agent_class, config, battlefield):
     agents = []
     for _ in range(num_platoons):
         agent = agent_class(agent_type='platoon', config=config)
-        agent.force = 40.0 + 0.0 * (np.random.rand() - 0.5)
+        agent.force = config.threshold * config.mul + \
+                      (config.agent_forces[0] - config.threshold * config.mul) * np.random.rand()
         agents.append(agent)
 
     for _ in range(num_companies):
         agent = agent_class(agent_type='company', config=config)
-        agent.force = 135.0 + 0.0 * (np.random.rand() - 0.5)
+        agent.force = config.agent_forces[0] + \
+                      (config.agent_forces[1] - config.threshold * config.mul) * np.random.rand()
         agents.append(agent)
 
     for idx, agent in enumerate(agents):
@@ -93,9 +118,8 @@ def generate_blue_team(agent_class, config, battlefield):
     config.log_B0 = np.log(initial_force)
 
     """ allocate agent's initial position """
-    for i, agent in enumerate(agents):
-        agent.pos = (config.blue_pos[i] +
-                     np.random.choice([-1, 0, 1], size=2, p=[0., 1., 0.])).tolist()
+    for agent in agents:
+        agent.pos = allocate_blue_pos(battlefield, config.offset)
 
     return agents, initial_ef, initial_force, initial_effective_ef, initial_effective_force
 
@@ -117,12 +141,14 @@ def generate_red_team(agent_class, config, battlefield, blues):
     agents = []
     for _ in range(num_platoons):
         agent = agent_class(agent_type='platoon', config=config)
-        agent.force = 40.0 + 0.0 * (np.random.rand() - 0.5)
+        agent.force = config.threshold * config.mul + \
+                      (config.agent_forces[0] - config.threshold * config.mul) * np.random.rand()
         agents.append(agent)
 
     for _ in range(num_companies):
         agent = agent_class(agent_type='company', config=config)
-        agent.force = 135.0 + 0.0 * (np.random.rand() - 0.5)
+        agent.force = config.agent_forces[0] + \
+                      (config.agent_forces[1] - config.threshold * config.mul) * np.random.rand()
         agents.append(agent)
 
     for idx, agent in enumerate(agents):
@@ -147,17 +173,17 @@ def generate_red_team(agent_class, config, battlefield, blues):
     config.log_R0 = np.log(initial_force)
 
     """ allocate agent's initial position (need blues) """
-
-    for i, agent in enumerate(agents):
-        agent.pos = (config.red_pos[i] +
-                     np.random.choice([-1, 0, 1], size=2, p=[0., 1., 0.])).tolist()
+    for agent in agents:
+        agent.pos = allocate_red_pos(battlefield, blues, config.offset)
 
     return agents, initial_ef, initial_force, initial_effective_ef, initial_effective_force
 
 
 def main():
     """ Define configuration """
+
     config = Config()
+
     config.reset()
 
     """ Generate battlefield """
@@ -168,6 +194,7 @@ def main():
     plt.show()
 
     """ Generate Blue team """
+
     blues, _, _, _, _ = generate_blue_team(BLUE, config, battlefield)
 
     summary_of_team(blues)
@@ -175,6 +202,7 @@ def main():
     blues_map = visualize_blues_num_map(blues, battlefield, config)
 
     """ Generate Red team """
+
     reds, _, _, _, _ = generate_red_team(RED, config, battlefield, blues)
 
     summary_of_team(reds)
@@ -185,7 +213,9 @@ def main():
     visualize_battlefield_agents_num_map(battlefield, reds_map, blues_map, reds, blues, config)
 
     """ Lanchester simulations """
+
     # Compute average efficiency and total force
+
     R0, rR0, _, _ = compute_initial_total_force_and_ef(reds)
     average_r = rR0 / R0
 
