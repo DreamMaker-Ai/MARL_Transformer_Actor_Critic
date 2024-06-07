@@ -11,8 +11,8 @@ from commander_vae_model import CommanderVAE
 
 
 def main():
-    continue_learning = True
-    initial_vae_id = 8750  # 0 for initial
+    continue_learning = False
+    initial_vae_id = 0  # 0 for initial
     vae_dir = "vaes/vae_" + str(initial_vae_id) + "/"
 
     num_minibatches = 100
@@ -146,7 +146,7 @@ def train_vae(bce, env, minibatch, optimizer, vae):
 
         """ vae loss """
         # vae_loss = reconst_loss + kl_loss
-        vae_loss = tf.reduce_mean(reconst_loss + 0.01 * kl_loss)
+        vae_loss = tf.reduce_mean(reconst_loss + env.config.kl_loss_coef * kl_loss)
 
     """ Update weights """
     variables = vae.trainable_variables

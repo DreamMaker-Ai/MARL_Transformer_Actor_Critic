@@ -8,6 +8,7 @@ class Config:
         self.batch_size = 32
         self.hidden_dim = 64
         self.learning_rate = 1e-4
+        self.kl_loss_coef = 0.001
 
         self.grid_size = None
         self.grid_range = (10, 50)
